@@ -26,6 +26,19 @@ app.use(express.json()); // Body parser for JSON requests
 app.use(express.urlencoded({ extended: true })); // For parsing URL-encoded data
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Serve uploaded receipts
 
+// Root route for testing
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Backend API is running',
+    status: 'OK',
+    endpoints: {
+      auth: '/api/auth',
+      bookings: '/api/bookings',
+      admin: '/api/admin'
+    }
+  });
+});
+
 // Authentication Routes
 app.use('/api/auth', authRoutes); // Authentication-related routes (register, login)
 
