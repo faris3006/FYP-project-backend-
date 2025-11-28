@@ -14,7 +14,14 @@ dotenv.config(); // Load environment variables
 const app = express();
 
 // Middleware
-app.use(cors()); // Enable CORS for all origins (or specific origins if needed)
+app.use(cors({
+  origin: [
+    'https://fyp-project-nine-gray.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
+  credentials: true
+})); // Enable CORS for frontend origins
 app.use(express.json()); // Body parser for JSON requests
 app.use(express.urlencoded({ extended: true })); // For parsing URL-encoded data
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Serve uploaded receipts
