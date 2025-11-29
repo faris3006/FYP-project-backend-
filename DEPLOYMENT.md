@@ -68,7 +68,7 @@ NODE_ENV=production
 ### 7. Update Frontend
 
 After deployment, update your frontend's API URL:
-- Change from: `http://localhost:5000`
+- Change from: `https://fyp-project-backend.onrender.com`
 - Change to: `https://your-backend-name.onrender.com`
 
 ## Troubleshooting

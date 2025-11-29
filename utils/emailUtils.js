@@ -16,13 +16,16 @@ const transporter = nodemailer.createTransport({
 // Send email verification email
 const sendVerificationEmail = (email, userId) => {
   const verificationToken = jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '1h' });
+  
+  // Use BACKEND_URL from environment or default to Render URL
+  const backendUrl = process.env.BACKEND_URL || 'https://fyp-project-backend.onrender.com';
 
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: email,
     subject: 'Verify Your Email',
     html: `<p>Please verify your email by clicking the link below:</p>
-           <a href="http://localhost:5000/api/auth/verify-email?token=${verificationToken}">Verify Email</a>`,
+           <a href="${backendUrl}/api/auth/verify-email?token=${verificationToken}">Verify Email</a>`,
   };
 
   transporter.sendMail(mailOptions, (err, info) => {

@@ -32,9 +32,9 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 **Change to:**
 ```javascript
-const API_URL = 'https://your-backend-url.onrender.com';
+const API_URL = 'https://fyp-project-backend.onrender.com';
 // or better, use environment variable:
-const API_URL = process.env.REACT_APP_API_URL || 'https://your-backend-url.onrender.com';
+const API_URL = process.env.REACT_APP_API_URL || 'https://fyp-project-backend.onrender.com';
 ```
 
 ### 3. Update Vercel Environment Variables
@@ -44,7 +44,7 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://your-backend-url.onren
 3. Go to **Settings** → **Environment Variables**
 4. Add or update:
    - **Key:** `REACT_APP_API_URL`
-   - **Value:** `https://your-backend-url.onrender.com`
+   - **Value:** `https://fyp-project-backend.onrender.com`
    - **Environment:** Production, Preview, Development (select all)
 5. Click **Save**
 
@@ -70,7 +70,7 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://your-backend-url.onren
 
 Test if backend is accessible:
 1. Open browser on phone
-2. Visit: `https://your-backend-url.onrender.com/`
+2. Visit: `https://fyp-project-backend.onrender.com/`
 3. Should see: `{ "message": "Backend API is running", "status": "OK" }`
 
 If you see this, backend is working! The issue is just the frontend API URL.
