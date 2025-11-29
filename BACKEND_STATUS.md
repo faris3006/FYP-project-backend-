@@ -102,3 +102,4 @@ NODE_ENV=production
 - **Authentication:** All booking/admin endpoints require JWT token in Authorization header
 - **File Uploads:** Receipt uploads are limited to 20MB (PNG, JPG, PDF)
 
+

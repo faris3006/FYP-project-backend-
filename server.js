@@ -13,14 +13,17 @@ dotenv.config(); // Load environment variables
 
 const app = express();
 
-// Middleware
+// Middleware - CORS configuration
 app.use(cors({
   origin: [
     'https://fyp-project-nine-gray.vercel.app',
+    'https://fyp-project-nine-gray.vercel.app/',
     'http://localhost:3000',
     'http://localhost:3001'
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 })); // Enable CORS for frontend origins
 app.use(express.json()); // Body parser for JSON requests
 app.use(express.urlencoded({ extended: true })); // For parsing URL-encoded data
