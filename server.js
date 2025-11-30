@@ -22,12 +22,13 @@ app.use(cors({
     // List of allowed origins
     const allowedOrigins = [
       'https://fyp-project-nine-gray.vercel.app',
+      'https://fyp-project-git-main-faris-projects-56742192.vercel.app',
       'http://localhost:3000',
       'http://localhost:3001'
     ];
     
     // Allow all Vercel preview URLs (pattern: *.vercel.app)
-    const isVercelPreview = origin.endsWith('.vercel.app');
+    const isVercelPreview = origin && origin.includes('.vercel.app');
     
     if (allowedOrigins.includes(origin) || isVercelPreview) {
       callback(null, true);
