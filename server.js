@@ -15,12 +15,26 @@ const app = express();
 
 // Middleware - CORS configuration
 app.use(cors({
-  origin: [
-    'https://fyp-project-nine-gray.vercel.app',
-    'https://fyp-project-nine-gray.vercel.app/',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // List of allowed origins
+    const allowedOrigins = [
+      'https://fyp-project-nine-gray.vercel.app',
+      'http://localhost:3000',
+      'http://localhost:3001'
+    ];
+    
+    // Allow all Vercel preview URLs (pattern: *.vercel.app)
+    const isVercelPreview = origin.endsWith('.vercel.app');
+    
+    if (allowedOrigins.includes(origin) || isVercelPreview) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
