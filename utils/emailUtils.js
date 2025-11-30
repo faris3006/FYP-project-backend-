@@ -39,19 +39,23 @@ const sendVerificationEmail = (email, userId) => {
 
 // Send MFA email with the 6-digit code
 const sendMfaEmail = (email, mfaCode) => {
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: 'Your MFA Code',
-    html: `<p>Your 6-digit MFA code is: <strong>${mfaCode}</strong></p>`,
-  };
+  return new Promise((resolve, reject) => {
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Your MFA Code',
+      html: `<p>Your 6-digit MFA code is: <strong>${mfaCode}</strong></p>`,
+    };
 
-  transporter.sendMail(mailOptions, (err, info) => {
-    if (err) {
-      console.error('Error sending MFA email:', err);
-    } else {
-      console.log('MFA email sent:', info.response);
-    }
+    transporter.sendMail(mailOptions, (err, info) => {
+      if (err) {
+        console.error('Error sending MFA email:', err);
+        reject(err);
+      } else {
+        console.log('MFA email sent:', info.response);
+        resolve(info);
+      }
+    });
   });
 };
 
