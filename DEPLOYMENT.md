@@ -2,7 +2,7 @@
 
 ## Prerequisites
 - GitHub repository: https://github.com/faris3006/FYP-project-backend-
-- MongoDB Atlas connection string: mongodb+srv://Faris:Faris@cluster0.hijww1t.mongodb.net/eventease?appName=Cluster0
+- MongoDB Atlas connection string: Set as environment variable DB_URI (see below)
 - Render account: https://render.com
 
 ## Step-by-Step Deployment on Render
@@ -40,7 +40,7 @@ git push origin main
 Click **"Advanced"** and add these environment variables:
 
 ```
-DB_URI=mongodb+srv://Faris:Faris@cluster0.hijww1t.mongodb.net/eventease?appName=Cluster0
+DB_URI=mongodb+srv://Faris:<password>@cluster0.hijww1t.mongodb.net/eventease?appName=Cluster0
 JWT_SECRET=your-jwt-secret-key
 EMAIL_USER=mankulim625@gmail.com
 EMAIL_PASS=kazgsgvjzzkfmrrq
