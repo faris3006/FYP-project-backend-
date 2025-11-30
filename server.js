@@ -60,10 +60,22 @@ app.get('/', (req, res) => {
 // Authentication Routes
 app.use('/api/auth', authRoutes); // Authentication-related routes (register, login)
 
-// Database Connection (MongoDB) without deprecated options
-mongoose.connect(process.env.DB_URI)
-  .then(() => console.log('Database connected'))
-  .catch((error) => console.log('Database connection failed', error));
+// Database Connection (MongoDB) with timeout and retry
+mongoose.connect(process.env.DB_URI, {
+  serverSelectionTimeoutMS: 5000,
+  connectTimeoutMS: 5000,
+  retryWrites: true,
+  w: 'majority'
+})
+  .then(() => console.log('Database connected successfully'))
+  .catch((error) => {
+    console.log('Database connection failed:', error.message);
+    // Retry connection after 5 seconds
+    setTimeout(() => {
+      console.log('Retrying database connection...');
+      mongoose.connect(process.env.DB_URI);
+    }, 5000);
+  });
 
 // Start Server
 const port = process.env.PORT || 5000; // Default port 5000 or the one in .env
