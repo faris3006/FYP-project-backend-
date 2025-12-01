@@ -9,9 +9,6 @@ const emailConfig = {
 
 // Initialize SendGrid with API key
 const initializeSendGrid = () => {
-  console.log('DEBUG: SENDGRID_API_KEY from env:', process.env.SENDGRID_API_KEY ? 'SET' : 'NOT SET');
-  console.log('DEBUG: emailConfig.apiKey:', emailConfig.apiKey ? 'SET' : 'NOT SET');
-
   if (!emailConfig.apiKey) {
     console.warn('SendGrid API key is not configured. Email sending will fail.');
     return false;
