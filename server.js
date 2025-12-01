@@ -7,6 +7,7 @@ const authRoutes = require('./routes/authRoutes'); // Authentication routes
 const adminRoutes = require('./routes/adminRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 const authenticateJWT = require('./middleware/authenticateJWT'); // your JWT auth middleware
+const { sendVerificationEmail } = require('./utils/emailUtils');
 
 
 dotenv.config(); // Load environment variables
@@ -46,15 +47,39 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Serve u
 
 // Root route for testing
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'Backend API is running',
     status: 'OK',
     endpoints: {
       auth: '/api/auth',
       bookings: '/api/bookings',
-      admin: '/api/admin'
+      admin: '/api/admin',
+      testEmail: '/api/test-email'
     }
   });
+});
+
+// Test email endpoint
+app.post('/api/test-email', (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required' });
+  }
+
+  try {
+    // Send a test verification email
+    sendVerificationEmail(email, 'test-user-id');
+
+    res.json({
+      message: 'Test email sent successfully!',
+      email: email,
+      note: 'Check your inbox for the verification email from mankulim625@gmail.com'
+    });
+  } catch (error) {
+    console.error('Test email error:', error);
+    res.status(500).json({ message: 'Failed to send test email', error: error.message });
+  }
 });
 
 // Authentication Routes
