@@ -1,17 +1,12 @@
-const nodemailer = require('nodemailer');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
+const { initializeSendGrid, getSendGridClient } = require('../config/emailConfig');
 
 dotenv.config();
 
-// Create reusable transporter object using SMTP transport
-const transporter = nodemailer.createTransport({
-  service: 'gmail', // Or any other email service
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// Initialize SendGrid using configuration
+const sgMailInitialized = initializeSendGrid();
+const sgMail = sgMailInitialized ? getSendGridClient() : null;
 
 // Send email verification email
 const sendVerificationEmail = (email, userId) => {
@@ -20,43 +15,39 @@ const sendVerificationEmail = (email, userId) => {
   // Use BACKEND_URL from environment or default to Render URL
   const backendUrl = process.env.BACKEND_URL || 'https://fyp-project-backend.onrender.com';
 
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
+  const msg = {
     to: email,
+    from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
     subject: 'Verify Your Email',
     html: `<p>Please verify your email by clicking the link below:</p>
            <a href="${backendUrl}/api/auth/verify-email?token=${verificationToken}">Verify Email</a>`,
   };
 
-  transporter.sendMail(mailOptions, (err, info) => {
-    if (err) {
-      console.error('Error sending email verification:', err);
-    } else {
-      console.log('Email verification sent:', info.response);
-    }
-  });
+  sgMail
+    .send(msg)
+    .then(() => console.log('Email verification sent via SendGrid'))
+    .catch((err) => console.error('Error sending email verification:', err));
 };
 
 // Send MFA email with the 6-digit code
 const sendMfaEmail = (email, mfaCode) => {
-  return new Promise((resolve, reject) => {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Your MFA Code',
-      html: `<p>Your 6-digit MFA code is: <strong>${mfaCode}</strong></p>`,
-    };
+  const msg = {
+    to: email,
+    from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+    subject: 'Your MFA Code',
+    html: `<p>Your 6-digit MFA code is: <strong>${mfaCode}</strong></p>`,
+  };
 
-    transporter.sendMail(mailOptions, (err, info) => {
-      if (err) {
-        console.error('Error sending MFA email:', err);
-        reject(err);
-      } else {
-        console.log('MFA email sent:', info.response);
-        resolve(info);
-      }
+  return sgMail
+    .send(msg)
+    .then((res) => {
+      console.log('MFA email sent via SendGrid');
+      return res;
+    })
+    .catch((err) => {
+      console.error('Error sending MFA email:', err);
+      throw err;
     });
-  });
 };
 
 module.exports = { sendVerificationEmail, sendMfaEmail };
