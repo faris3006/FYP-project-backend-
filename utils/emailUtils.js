@@ -1,17 +1,29 @@
-const dotenv = require('dotenv');
+// Note: dotenv.config() is already called in server.js
 const jwt = require('jsonwebtoken');
 const { initializeSendGrid, getSendGridClient } = require('../config/emailConfig');
 
-dotenv.config();
+// Initialize SendGrid when needed (not at module load)
+let sgMailInitialized = false;
+let sgMail = null;
 
-// Initialize SendGrid using configuration
-const sgMailInitialized = initializeSendGrid();
-const sgMail = sgMailInitialized ? getSendGridClient() : null;
+const ensureSendGridInitialized = () => {
+  if (!sgMailInitialized) {
+    sgMailInitialized = initializeSendGrid();
+    sgMail = sgMailInitialized ? getSendGridClient() : null;
+  }
+  return sgMail;
+};
 
 // Send email verification email
 const sendVerificationEmail = (email, userId) => {
+  const sgMailClient = ensureSendGridInitialized();
+  if (!sgMailClient) {
+    console.error('SendGrid client not available for verification email');
+    return;
+  }
+
   const verificationToken = jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '1h' });
-  
+
   // Use BACKEND_URL from environment or default to Render URL
   const backendUrl = process.env.BACKEND_URL || 'https://fyp-project-backend.onrender.com';
 
@@ -23,7 +35,7 @@ const sendVerificationEmail = (email, userId) => {
            <a href="${backendUrl}/api/auth/verify-email?token=${verificationToken}">Verify Email</a>`,
   };
 
-  sgMail
+  sgMailClient
     .send(msg)
     .then(() => console.log('Email verification sent via SendGrid'))
     .catch((err) => console.error('Error sending email verification:', err));
@@ -31,6 +43,12 @@ const sendVerificationEmail = (email, userId) => {
 
 // Send MFA email with the 6-digit code
 const sendMfaEmail = (email, mfaCode) => {
+  const sgMailClient = ensureSendGridInitialized();
+  if (!sgMailClient) {
+    console.error('SendGrid client not available for MFA email');
+    throw new Error('Email service unavailable');
+  }
+
   const msg = {
     to: email,
     from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
@@ -38,7 +56,7 @@ const sendMfaEmail = (email, mfaCode) => {
     html: `<p>Your 6-digit MFA code is: <strong>${mfaCode}</strong></p>`,
   };
 
-  return sgMail
+  return sgMailClient
     .send(msg)
     .then((res) => {
       console.log('MFA email sent via SendGrid');
