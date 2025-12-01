@@ -18,27 +18,35 @@ app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
-    // List of allowed origins
+
+    // In production, allow all origins for easier mobile/desktop access
+    if (process.env.NODE_ENV === 'production') {
+      return callback(null, true);
+    }
+
+    // In development, restrict to specific origins
     const allowedOrigins = [
       'https://fyp-project-nine-gray.vercel.app',
       'https://fyp-project-git-main-faris-projects-56742192.vercel.app',
       'http://localhost:3000',
-      'http://localhost:3001'
+      'http://localhost:3001',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001'
     ];
-    
+
     // Allow all Vercel preview URLs (pattern: *.vercel.app)
     const isVercelPreview = origin && origin.includes('.vercel.app');
-    
+
     if (allowedOrigins.includes(origin) || isVercelPreview) {
       callback(null, true);
     } else {
+      console.log('CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 })); // Enable CORS for frontend origins
 app.use(express.json()); // Body parser for JSON requests
 app.use(express.urlencoded({ extended: true })); // For parsing URL-encoded data

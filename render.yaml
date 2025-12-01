@@ -9,5 +9,13 @@ services:
         value: production
       - key: PORT
         value: 10000
-
-
+      - key: DB_URI
+        value: mongodb+srv://Faris:nskV2FZtvzeeoYUu@cluster0.hijww1t.mongodb.net/eventease?appName=Cluster0
+      - key: JWT_SECRET
+        value: your-jwt-secret-key
+      - key: SENDGRID_API_KEY
+        value: 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
+      - key: EMAIL_FROM
+        value: mankulim625@gmail.com
+      - key: BACKEND_URL
+        value: https://fyp-project-backend.onrender.com
