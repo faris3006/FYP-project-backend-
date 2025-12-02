@@ -10,6 +10,10 @@ const adminRoutes = require('./routes/adminRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 const authenticateJWT = require('./middleware/authenticateJWT'); // your JWT auth middleware
 const { sendVerificationEmail } = require('./utils/emailUtils');
+const { initializeSendGrid } = require('./config/emailConfig');
+
+// Initialize SendGrid on startup
+initializeSendGrid();
 
 const app = express();
 
