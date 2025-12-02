@@ -36,14 +36,25 @@ router.post('/register', async (req, res) => {
 
     await user.save();
 
-    sendVerificationEmail(user.email, user._id);
+    // Send verification email and handle errors properly
+    try {
+      await sendVerificationEmail(user.email, user._id);
+      console.log('Verification email sent successfully to:', email);
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      // Don't fail registration if email fails, but log it
+      // User can still verify later or request resend
+    }
 
     res.status(201).json({
-      message: 'Registration successful! Please verify your email.',
+      message: 'Registration successful! Please check your email for verification instructions.',
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Registration error:', error);
+    res.status(500).json({
+      message: 'Server error during registration',
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+    });
   }
 });
 
@@ -146,22 +157,41 @@ router.get('/verify-email', async (req, res) => {
 router.post('/verify-mfa', async (req, res) => {
   const { mfaCode, userId } = req.body;
 
+  console.log('MFA verification attempt for userId:', userId, 'with code:', mfaCode);
+
   if (!mfaCode || !userId) {
+    console.log('Missing MFA code or userId');
     return res.status(400).json({ message: 'MFA code and user ID are required.' });
   }
 
   try {
     const user = await User.findById(userId);
+    console.log('User found:', user ? 'yes' : 'no');
 
-    if (!user || user.mfaCode !== mfaCode) {
+    if (!user) {
+      console.log('User not found for MFA verification');
+      return res.status(400).json({ message: 'Invalid user.' });
+    }
+
+    if (!user.mfaCode || user.mfaCode !== mfaCode) {
+      console.log('Invalid MFA code. Expected:', user.mfaCode, 'Received:', mfaCode);
       return res.status(400).json({ message: 'Invalid MFA code.' });
     }
 
-    user.isVerified = true;
+    // Check if MFA code has expired
+    if (user.mfaExpiry && new Date() > user.mfaExpiry) {
+      console.log('MFA code expired');
+      return res.status(400).json({ message: 'MFA code has expired. Please login again.' });
+    }
+
+    // Clear MFA data and update verification timestamp
     user.mfaCode = undefined;
     user.mfaExpiry = undefined;
-    user.lastMfaVerifiedAt = new Date(); // update last MFA verified time
-    await user.save();
+    user.lastMfaVerifiedAt = new Date();
+
+    console.log('Saving user after MFA verification...');
+    await user.save({ validateBeforeSave: false });
+    console.log('User saved successfully');
 
     const token = jwt.sign(
       { userId: user._id, role: user.role },
@@ -169,13 +199,18 @@ router.post('/verify-mfa', async (req, res) => {
       { expiresIn: '1h' }
     );
 
+    console.log('MFA verification successful for user:', userId);
+
     res.status(200).json({
       message: 'MFA verified successfully!',
       token,
     });
   } catch (error) {
     console.error('MFA verification error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({
+      message: 'Server error during MFA verification',
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+    });
   }
 });
 
