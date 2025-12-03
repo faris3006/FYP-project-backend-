@@ -38,12 +38,14 @@ router.get("/bookings/receipt-queue", verifyAdmin, async (req, res) => {
   }
 });
 
-// Get completed bookings for history view
+// Get all bookings for history view (completed or pending)
 router.get("/bookings/history", verifyAdmin, async (req, res) => {
   try {
-    const bookings = await Booking.find({ paymentStatus: "completed" })
+    const bookings = await Booking.find()
       .populate("userId", "name email phone")
-      .sort({ paymentCompletedAt: -1, updatedAt: -1 });
+      // Primary sort: creation time (when user submitted booking)
+      // Secondary sort: latest status change
+      .sort({ createdAt: -1, updatedAt: -1 });
     res.json({ bookings });
   } catch (error) {
     console.error("Error fetching booking history:", error);
