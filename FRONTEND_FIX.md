@@ -90,3 +90,18 @@ Check:
 4. ✅ Backend is accessible (test the `/` endpoint)
 5. ✅ CORS is configured (already done in backend)
 
+i asking okay, JUST ANSWER IT FIRST NO NEED TO DO EVERTHING JUST ANSWER WITH SIMPLE ANSWER
+
+what is the different with this URL
+
+(https://vercel.com/faris-projects-56742192/fyp-project/4cQTLngKhqvzapve6EjeTX2XN9GF)
+
+(https://fyp-project-nine-gray.vercel.app/)
+
+(https://fyp-project-git-main-faris-projects-56742192.vercel.app/)
+
+(https://fyp-project-3za0fuxmk-faris-projects-56742192.vercel.app/)
+
+(https://fyp-project-git-main-faris-projects-56742192.vercel.app/)
+
+(https://fyp-project-clxxpq480-faris-projects-56742192.vercel.app/)

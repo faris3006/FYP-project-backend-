@@ -134,22 +134,126 @@ router.get('/verify-email', async (req, res) => {
   const { token } = req.query;
 
   if (!token) {
-    return res.status(400).json({ message: 'Missing token' });
+    return res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Verification Failed</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+          .error { background-color: #f8d7da; color: #721c24; padding: 20px; border-radius: 5px; border: 1px solid #f5c6cb; }
+          .success { background-color: #d4edda; color: #155724; padding: 20px; border-radius: 5px; border: 1px solid #c3e6cb; }
+          h1 { color: #333; }
+        </style>
+      </head>
+      <body>
+        <div class="error">
+          <h1>Verification Failed</h1>
+          <p>Missing verification token. Please check your email and use the complete verification link.</p>
+        </div>
+      </body>
+      </html>
+    `);
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.userId);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Verification Failed</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+            .error { background-color: #f8d7da; color: #721c24; padding: 20px; border-radius: 5px; border: 1px solid #f5c6cb; }
+            h1 { color: #333; }
+          </style>
+        </head>
+        <body>
+          <div class="error">
+            <h1>Verification Failed</h1>
+            <p>User not found. Please contact support if you believe this is an error.</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
+    if (user.isVerified) {
+      return res.status(200).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Email Already Verified</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+            .success { background-color: #d4edda; color: #155724; padding: 20px; border-radius: 5px; border: 1px solid #c3e6cb; }
+            h1 { color: #333; }
+          </style>
+        </head>
+        <body>
+          <div class="success">
+            <h1>Email Already Verified</h1>
+            <p>Your email has already been verified. You can now log in to your account.</p>
+            <p><a href="https://fyp-project-nine-gray.vercel.app/login" style="color: #155724; text-decoration: underline;">Go to Login Page</a></p>
+          </div>
+        </body>
+        </html>
+      `);
     }
 
     user.isVerified = true;
     await user.save();
 
-    res.status(200).json({ message: 'Email verified successfully!' });
+    res.status(200).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Email Verified Successfully</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+          .success { background-color: #d4edda; color: #155724; padding: 20px; border-radius: 5px; border: 1px solid #c3e6cb; }
+          .button { display: inline-block; background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+          h1 { color: #333; }
+        </style>
+      </head>
+      <body>
+        <div class="success">
+          <h1>✓ Email Verified Successfully!</h1>
+          <p>Your email has been verified. You can now log in to your account.</p>
+          <a href="https://fyp-project-nine-gray.vercel.app/login" class="button">Go to Login Page</a>
+        </div>
+      </body>
+      </html>
+    `);
   } catch (err) {
-    res.status(400).json({ message: 'Invalid or expired token' });
+    res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Verification Failed</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+          .error { background-color: #f8d7da; color: #721c24; padding: 20px; border-radius: 5px; border: 1px solid #f5c6cb; }
+          h1 { color: #333; }
+        </style>
+      </head>
+      <body>
+        <div class="error">
+          <h1>Verification Failed</h1>
+          <p>Invalid or expired verification token. The verification link may have expired (valid for 1 hour).</p>
+          <p>Please request a new verification email or contact support for assistance.</p>
+        </div>
+      </body>
+      </html>
+    `);
   }
 });
 
