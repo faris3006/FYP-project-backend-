@@ -26,7 +26,9 @@ const sendVerificationEmail = async (email, userId) => {
     const verificationToken = jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
     // Use BACKEND_URL from environment or default to Render URL
-    const backendUrl = process.env.BACKEND_URL || 'https://fyp-project-backend.onrender.com';
+    let backendUrl = process.env.BACKEND_URL || 'https://fyp-project-backend.onrender.com';
+    backendUrl = backendUrl.replace(/\/*$/, ''); // Remove trailing slashes to avoid paths like //api
+    const verificationUrl = `${backendUrl}/api/auth/verify-email?token=${verificationToken}`;
 
     const msg = {
       to: email,
@@ -56,10 +58,10 @@ const sendVerificationEmail = async (email, userId) => {
           <div class="content">
             <h2>Please verify your email address</h2>
             <p>Thank you for registering with Booking System. To complete your registration and start booking services, please verify your email address by clicking the button below:</p>
-            <a href="${backendUrl}/api/auth/verify-email?token=${verificationToken}" class="button">Verify Email Address</a>
+            <a href="${verificationUrl}" class="button">Verify Email Address</a>
             <p><strong>This verification link will expire in 1 hour.</strong></p>
             <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
-            <p>${backendUrl}/api/auth/verify-email?token=${verificationToken}</p>
+            <p>${verificationUrl}</p>
             <p>If you didn't create an account, please ignore this email.</p>
           </div>
           <div class="footer">
@@ -71,7 +73,7 @@ const sendVerificationEmail = async (email, userId) => {
       `,
       text: `Welcome to Booking System!
 
-Thank you for registering. Please verify your email by visiting: ${backendUrl}/api/auth/verify-email?token=${verificationToken}
+Thank you for registering. Please verify your email by visiting: ${verificationUrl}
 
 This link will expire in 1 hour.
 

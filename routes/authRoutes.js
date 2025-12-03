@@ -259,12 +259,23 @@ router.get('/verify-email', async (req, res) => {
 
 // MFA Verification Route
 router.post('/verify-mfa', async (req, res) => {
-  const { mfaCode, userId } = req.body;
+  // Accept multiple possible field names from frontend to be more robust
+  const {
+    mfaCode: bodyMfaCode,
+    code,
+    otp,
+    userId: bodyUserId,
+    userID,
+    id,
+  } = req.body || {};
 
-  console.log('MFA verification attempt for userId:', userId, 'with code:', mfaCode);
+  const mfaCode = (bodyMfaCode || code || otp || '').toString().trim();
+  const userId = (bodyUserId || userID || id || '').toString().trim();
+
+  console.log('MFA verification attempt for userId:', userId || '(none)', 'with code:', mfaCode || '(none)');
 
   if (!mfaCode || !userId) {
-    console.log('Missing MFA code or userId');
+    console.log('Missing MFA code or userId in request body. Body received:', req.body);
     return res.status(400).json({ message: 'MFA code and user ID are required.' });
   }
 
