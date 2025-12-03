@@ -38,6 +38,19 @@ router.get("/bookings/receipt-queue", verifyAdmin, async (req, res) => {
   }
 });
 
+// Get completed bookings for history view
+router.get("/bookings/history", verifyAdmin, async (req, res) => {
+  try {
+    const bookings = await Booking.find({ paymentStatus: "completed" })
+      .populate("userId", "name email phone")
+      .sort({ paymentCompletedAt: -1, updatedAt: -1 });
+    res.json({ bookings });
+  } catch (error) {
+    console.error("Error fetching booking history:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
 // Get all bookings with user info (for booking history - read-only display)
 router.get("/bookings", verifyAdmin, async (req, res) => {
   try {
@@ -54,8 +67,23 @@ router.get("/bookings", verifyAdmin, async (req, res) => {
 // Update payment status
 router.put("/bookings/:id/payment", verifyAdmin, async (req, res) => {
   const { id } = req.params;
-  const { paymentStatus } = req.body;
-  const allowedStatuses = ["completed", "pending"];
+  let { paymentStatus } = req.body;
+
+  if (!paymentStatus) {
+    return res.status(400).json({ message: "paymentStatus is required" });
+  }
+
+  // Normalize commonly used aliases from the frontend
+  const normalizedStatus = paymentStatus.toLowerCase();
+  if (normalizedStatus === "approved" || normalizedStatus === "paid") {
+    paymentStatus = "completed";
+  } else if (normalizedStatus === "receipt_submitted" || normalizedStatus === "receipt-submitted") {
+    paymentStatus = "receipt_submitted";
+  } else if (normalizedStatus === "pending") {
+    paymentStatus = "pending";
+  }
+
+  const allowedStatuses = ["pending", "receipt_submitted", "completed"];
 
   if (!allowedStatuses.includes(paymentStatus)) {
     return res.status(400).json({ message: "Invalid status value" });
@@ -66,6 +94,13 @@ router.put("/bookings/:id/payment", verifyAdmin, async (req, res) => {
     if (!booking) return res.status(404).json({ message: "Booking not found" });
 
     booking.paymentStatus = paymentStatus;
+
+    if (paymentStatus === "completed") {
+      booking.paymentCompletedAt = new Date();
+    } else {
+      booking.paymentCompletedAt = undefined;
+    }
+
     await booking.save();
 
     res.json({ message: "Payment status updated", booking });

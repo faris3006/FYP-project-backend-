@@ -24,6 +24,7 @@ const bookingSchema = new mongoose.Schema(
       enum: ['pending', 'receipt_submitted', 'completed'],
       default: 'pending',
     },
+    paymentCompletedAt: { type: Date },
     receiptUploads: { type: [receiptSchema], default: [] },
   },
   { timestamps: true }
