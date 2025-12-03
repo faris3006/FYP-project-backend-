@@ -68,49 +68,83 @@ router.post('/login', async (req, res) => {
 
   try {
     const user = await User.findOne({ email });
-    if (!user) {
+    let currentUser = user;
+
+    // Auto-create admin user on first login if configured via environment variables
+    if (!currentUser && email === process.env.ADMIN_EMAIL) {
+      try {
+        const adminPassword = process.env.ADMIN_PASSWORD;
+        const adminName = process.env.ADMIN_NAME || 'Admin User';
+        const adminPhone = process.env.ADMIN_PHONE || '0000000000';
+
+        if (!adminPassword) {
+          console.error('ADMIN_PASSWORD is not set. Cannot auto-create admin user.');
+          return res.status(500).json({ message: 'Admin account is not configured on the server.' });
+        }
+
+        const hashedAdminPassword = await bcrypt.hash(adminPassword, 10);
+
+        const adminUser = new User({
+          name: adminName,
+          phone: adminPhone,
+          email,
+          password: hashedAdminPassword,
+          role: 'admin',
+          isVerified: true,
+        });
+
+        await adminUser.save();
+        console.log('Admin user auto-created during login for email:', email);
+        currentUser = adminUser;
+      } catch (createErr) {
+        console.error('Error auto-creating admin user:', createErr);
+        return res.status(500).json({ message: 'Failed to create admin account.' });
+      }
+    }
+
+    if (!currentUser) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, currentUser.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    if (!user.isVerified) {
+    if (!currentUser.isVerified) {
       return res.status(403).json({ message: 'Please verify your email before logging in.' });
     }
 
     const now = new Date();
 
     let mfaValidUntil = null;
-    if (user.lastMfaVerifiedAt) {
-      mfaValidUntil = new Date(user.lastMfaVerifiedAt);
+    if (currentUser.lastMfaVerifiedAt) {
+      mfaValidUntil = new Date(currentUser.lastMfaVerifiedAt);
       mfaValidUntil.setHours(mfaValidUntil.getHours() + 72); // 72 hours after last MFA verification
     }
 
     // Require MFA if no previous verification or expired
-    if (!user.lastMfaVerifiedAt || now > mfaValidUntil) {
+    if (!currentUser.lastMfaVerifiedAt || now > mfaValidUntil) {
       const mfaCode = Math.floor(100000 + Math.random() * 900000).toString();
       const mfaExpiry = new Date();
       mfaExpiry.setHours(mfaExpiry.getHours() + 72);
 
-      user.mfaCode = mfaCode;
-      user.mfaExpiry = mfaExpiry;
-      await user.save({ validateBeforeSave: false });
+      currentUser.mfaCode = mfaCode;
+      currentUser.mfaExpiry = mfaExpiry;
+      await currentUser.save({ validateBeforeSave: false });
 
-      await sendMfaEmail(user.email, mfaCode);
+      await sendMfaEmail(currentUser.email, mfaCode);
 
       return res.status(200).json({
         message: 'Login successful! Please verify your MFA code.',
         mfaRequired: true,
-        userId: user._id,
+        userId: currentUser._id,
       });
     }
 
     // MFA still valid, skip MFA and generate token
     const token = jwt.sign(
-      { userId: user._id, role: user.role },
+      { userId: currentUser._id, role: currentUser.role },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
