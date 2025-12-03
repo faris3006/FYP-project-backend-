@@ -37,16 +37,24 @@ git push origin main
 
 ### 4. Set Environment Variables
 
-Click **"Advanced"** and add these environment variables:
+Click **"Advanced"** and add these environment variables (never commit real values to Git):
 
 ```
-DB_URI=mongodb+srv://Faris:<password>@cluster0.hijww1t.mongodb.net/eventease?appName=Cluster0
-JWT_SECRET=your-jwt-secret-key
-EMAIL_USER=mankulim625@gmail.com
-EMAIL_PASS=kazgsgvjzzkfmrrq
+DB_URI=<your-mongodb-connection-string>
+JWT_SECRET=<generate_a_strong_random_string>
+SENDGRID_API_KEY=<sendgrid_api_key>
+EMAIL_FROM=<notification_sender_email>
+EMAIL_FROM_NAME=<display_name_for_emails>
+BACKEND_URL=<https://your-render-service.onrender.com>
+ADMIN_EMAIL=<admin_user_email>
+ADMIN_PASSWORD=<admin_user_password>
+ADMIN_NAME=<admin_display_name>
+ADMIN_PHONE=<admin_phone_number>
 PORT=10000
 NODE_ENV=production
 ```
+
+> Tip: use `env.example` as a reference for all required environment variables and create your own `.env` file locally (already gitignored).
 
 **Important:** 
 - Change `JWT_SECRET` to a strong random string (e.g., generate one at https://randomkeygen.com/)

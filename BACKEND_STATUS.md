@@ -19,20 +19,27 @@ CORS is configured to allow requests from:
 ### 2. ✅ Environment Variables
 **Status:** REQUIRED ON RENDER DASHBOARD
 
-Make sure these are set in Render dashboard → Environment Variables:
+Make sure these are set in Render dashboard → Environment Variables (see `env.example` for the complete list):
 
 ```
-DB_URI=mongodb+srv://Faris:Faris@cluster0.hijww1t.mongodb.net/eventease?appName=Cluster0
-JWT_SECRET=your-jwt-secret-key
-EMAIL_USER=mankulim625@gmail.com
-EMAIL_PASS=kazgsgvjzzkfmrrq
+DB_URI=<your-mongodb-connection-string>
+JWT_SECRET=<generate_a_strong_random_string>
+SENDGRID_API_KEY=<sendgrid_api_key>
+EMAIL_FROM=<notification_sender_email>
+EMAIL_FROM_NAME=<display_name_for_emails>
+BACKEND_URL=<https://your-render-service.onrender.com>
+ADMIN_EMAIL=<admin_user_email>
+ADMIN_PASSWORD=<admin_user_password>
+ADMIN_NAME=<admin_display_name>
+ADMIN_PHONE=<admin_phone_number>
 PORT=10000
 NODE_ENV=production
 ```
 
 **Important:** 
-- Replace `your-jwt-secret-key` with a strong random string
-- Verify MongoDB Atlas IP whitelist allows all IPs (0.0.0.0/0)
+- Never commit real secrets to Git. Configure them only via Render's dashboard or local `.env`.
+- Replace `JWT_SECRET` with a strong random string.
+- Verify MongoDB Atlas IP whitelist allows all IPs (0.0.0.0/0).
 
 ### 3. ✅ Backend URL Testing
 

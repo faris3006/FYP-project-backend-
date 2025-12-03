@@ -5,20 +5,21 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      # ⚠️ Never commit real secrets. Set the values directly in Render's dashboard.
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
       - key: DB_URI
-        value: mongodb+srv://Faris:nskV2FZtvzeeoYUu@cluster0.hijww1t.mongodb.net/eventease?appName=Cluster0
+        value: REPLACE_WITH_MONGODB_URI
       - key: JWT_SECRET
-        value: your-jwt-secret-key
+        value: REPLACE_WITH_SECURE_JWT_SECRET
       - key: SENDGRID_API_KEY
-        value: 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
+        value: REPLACE_WITH_SENDGRID_API_KEY
       - key: EMAIL_FROM
-        value: mankulim625@gmail.com
+        value: REPLACE_WITH_NOTIFICATION_EMAIL
       - key: BACKEND_URL
-        value: https://fyp-project-backend.onrender.com
+        value: https://your-backend-url.onrender.com
 
 
 

@@ -85,7 +85,7 @@ app.post('/api/test-email', (req, res) => {
     res.json({
       message: 'Test email sent successfully!',
       email: email,
-      note: 'Check your inbox for the verification email from mankulim625@gmail.com'
+      note: 'Check your inbox for the verification email from the configured sender address.'
     });
   } catch (error) {
     console.error('Test email error:', error);

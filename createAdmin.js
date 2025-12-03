@@ -4,13 +4,13 @@ const User = require('./models/User');
 require('dotenv').config();
 
 async function createAdmin() {
-  const adminEmail = process.env.ADMIN_EMAIL || 'mankulim625@gmail.com';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'MamuKulim44@';
-  const adminName = process.env.ADMIN_NAME || 'Admin User';
-  const adminPhone = process.env.ADMIN_PHONE || '0000000000';
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  const adminName = process.env.ADMIN_NAME;
+  const adminPhone = process.env.ADMIN_PHONE;
 
-  if (!adminEmail || !adminPassword) {
-    console.error('ADMIN_EMAIL and ADMIN_PASSWORD must be provided.');
+  if (!adminEmail || !adminPassword || !adminName || !adminPhone) {
+    console.error('ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME, and ADMIN_PHONE must be provided.');
     process.exit(1);
   }
 
