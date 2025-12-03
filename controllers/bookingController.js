@@ -109,9 +109,13 @@ exports.uploadReceipt = async (req, res) => {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
+    let backendUrl = process.env.BACKEND_URL || 'https://fyp-project-backend.onrender.com';
+    backendUrl = backendUrl.replace(/\/*$/, ''); // ensure no trailing slash
+    const receiptUrl = `${backendUrl}/uploads/receipts/${req.file.filename}`;
+
     booking.receiptUploads.push({
       filename: req.file.filename,
-      url: `/uploads/receipts/${req.file.filename}`,
+      url: receiptUrl,
       mimeType: req.file.mimetype,
       size: req.file.size,
       uploadedAt: new Date(),
