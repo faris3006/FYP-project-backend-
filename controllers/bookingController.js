@@ -34,7 +34,9 @@ exports.createBooking = async (req, res) => {
       paymentStatus: 'pending',
     });
 
-    res.status(201).json({ message: 'Booking created', booking });
+    // Convert to plain object to ensure clean serialization
+    const bookingData = booking.toObject();
+    res.status(201).json({ message: 'Booking created', booking: bookingData });
   } catch (error) {
     console.error('createBooking error:', error);
     res.status(500).json({ message: 'Unable to create booking' });
@@ -53,7 +55,9 @@ exports.getUserBookings = async (req, res) => {
     const userId = new mongoose.Types.ObjectId(req.user.userId);
     const bookings = await Booking.find({ userId: userId }).sort({ createdAt: -1 });
     
-    res.json({ bookings });
+    // Convert to plain objects to ensure clean serialization
+    const bookingsData = bookings.map(booking => booking.toObject());
+    res.json({ bookings: bookingsData });
   } catch (error) {
     console.error('getUserBookings error:', error);
     res.status(500).json({ message: 'Unable to load bookings' });
@@ -79,7 +83,9 @@ exports.getBookingById = async (req, res) => {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
-    res.json({ booking });
+    // Convert to plain object to ensure clean serialization
+    const bookingData = booking.toObject();
+    res.json({ booking: bookingData });
   } catch (error) {
     console.error('getBookingById error:', error);
     res.status(500).json({ message: 'Unable to fetch booking' });
@@ -124,7 +130,9 @@ exports.uploadReceipt = async (req, res) => {
     booking.paymentStatus = 'receipt_submitted';
     await booking.save();
 
-    res.json({ message: 'Receipt uploaded', booking });
+    // Convert to plain object to ensure clean serialization
+    const bookingData = booking.toObject();
+    res.json({ message: 'Receipt uploaded', booking: bookingData });
   } catch (error) {
     console.error('uploadReceipt error:', error);
     res.status(500).json({ message: 'Unable to upload receipt' });
