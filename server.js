@@ -5,6 +5,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const compression = require('compression');
 const authRoutes = require('./routes/authRoutes'); // Authentication routes
 const adminRoutes = require('./routes/adminRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
@@ -16,6 +17,20 @@ const { initializeSendGrid } = require('./config/emailConfig');
 initializeSendGrid();
 
 const app = express();
+
+// Set request timeout to 60 seconds for slow connections
+app.use((req, res, next) => {
+  req.setTimeout(60000);
+  res.setTimeout(60000);
+  next();
+});
+
+// Enable gzip compression for better performance on cellular networks
+try {
+  app.use(compression());
+} catch (e) {
+  console.warn('Compression middleware not available, continuing without it');
+}
 
 // Middleware - CORS configuration
 app.use(cors({
@@ -52,9 +67,16 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 })); // Enable CORS for frontend origins
-app.use(express.json()); // Body parser for JSON requests
-app.use(express.urlencoded({ extended: true })); // For parsing URL-encoded data
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Serve uploaded receipts
+
+// Body parser with size limits
+app.use(express.json({ limit: '50mb' })); // Body parser for JSON requests
+app.use(express.urlencoded({ extended: true, limit: '50mb' })); // For parsing URL-encoded data
+
+// Serve uploaded receipts with proper cache headers
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  maxAge: '1d',
+  etag: false
+}));
 
 // Root route for testing
 app.get('/', (req, res) => {
@@ -65,8 +87,19 @@ app.get('/', (req, res) => {
       auth: '/api/auth',
       bookings: '/api/bookings',
       admin: '/api/admin',
-      testEmail: '/api/test-email'
+      testEmail: '/api/test-email',
+      health: '/health'
     }
+  });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
@@ -119,6 +152,45 @@ const port = process.env.PORT || 5000; // Default port 5000 or the one in .env
 app.use('/api/bookings', authenticateJWT, bookingRoutes);
 app.use('/api/admin', authenticateJWT, adminRoutes);
 
-app.listen(port, () => {
+// 404 Handler - Route not found
+app.use((req, res) => {
+  res.status(404).json({
+    message: 'Route not found',
+    path: req.path,
+    method: req.method,
+    availableEndpoints: {
+      health: 'GET /health',
+      root: 'GET /',
+      auth: 'POST /api/auth/register, /api/auth/login',
+      bookings: 'GET /api/bookings, POST /api/bookings',
+      admin: 'GET /api/admin/...'
+    }
+  });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unexpected error:', err);
+  res.status(err.status || 500).json({
+    message: err.message || 'Internal Server Error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+const server = app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Backend URL: ${process.env.BACKEND_URL || 'http://localhost:' + port}`);
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+    mongoose.connection.close(false, () => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    });
+  });
 });
