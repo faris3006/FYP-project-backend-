@@ -10,6 +10,8 @@ const userSchema = new mongoose.Schema({
   mfaCode: { type: String },
   mfaExpiry: { type: Date },
   lastMfaVerifiedAt: { type: Date },
+  resetToken: { type: String, default: null },
+  resetTokenExpiry: { type: Date, default: null },
 });
 
 module.exports = mongoose.model('User', userSchema);

@@ -1,8 +1,9 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const User = require('../models/User');
-const { sendVerificationEmail, sendMfaEmail } = require('../utils/emailUtils');
+const { sendVerificationEmail, sendMfaEmail, sendPasswordResetEmail } = require('../utils/emailUtils');
 
 const router = express.Router();
 
@@ -358,6 +359,103 @@ router.post('/verify-mfa', async (req, res) => {
     console.error('MFA verification error:', error);
     res.status(500).json({
       message: 'Server error during MFA verification',
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+    });
+  }
+});
+
+// Forgot Password Route - Generate reset token and send email
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: 'Please provide your email address.' });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+
+    // Always return success to prevent email enumeration attacks
+    if (!user) {
+      return res.json({ 
+        message: 'If an account with that email exists, a password reset link has been sent.' 
+      });
+    }
+
+    // Generate secure random reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    user.resetToken = resetToken;
+    user.resetTokenExpiry = resetTokenExpiry;
+    await user.save();
+
+    // Send password reset email
+    try {
+      await sendPasswordResetEmail(user.email, resetToken);
+      console.log('Password reset email sent to:', email);
+    } catch (emailError) {
+      console.error('Failed to send password reset email:', emailError);
+      return res.status(500).json({ message: 'Failed to send reset email. Please try again.' });
+    }
+
+    res.json({ 
+      message: 'If an account with that email exists, a password reset link has been sent.' 
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({
+      message: 'Server error during password reset request',
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+    });
+  }
+});
+
+// Reset Password Route - Validate token and update password
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword, confirmPassword } = req.body;
+
+  if (!token || !newPassword || !confirmPassword) {
+    return res.status(400).json({ message: 'Please provide all required fields.' });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ message: 'Passwords do not match.' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
+  }
+
+  try {
+    const user = await User.findOne({
+      resetToken: token,
+      resetTokenExpiry: { $gt: Date.now() } // Token must not be expired
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired reset token.' });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear MFA verification (force re-verify)
+    user.password = hashedPassword;
+    user.lastMfaVerifiedAt = null; // FORCE MFA RE-VERIFICATION
+    user.resetToken = null; // Clear reset token
+    user.resetTokenExpiry = null; // Clear expiry
+    await user.save();
+
+    console.log('Password reset successful for user:', user.email);
+
+    res.json({ 
+      message: 'Password reset successful! Please login with your new password. You will need to verify your identity with MFA.' 
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({
+      message: 'Server error during password reset',
       error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
   }

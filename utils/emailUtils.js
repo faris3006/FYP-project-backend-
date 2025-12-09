@@ -165,4 +165,90 @@ Thank you for using Booking System!`
   }
 };
 
-module.exports = { sendVerificationEmail, sendMfaEmail };
+// Send password reset email
+const sendPasswordResetEmail = async (email, resetToken) => {
+  const sgMailClient = ensureSendGridInitialized();
+  if (!sgMailClient) {
+    console.error('SendGrid client not available for password reset email');
+    throw new Error('Email service unavailable');
+  }
+
+  try {
+    // Use BACKEND_URL from environment or default to Render URL
+    let frontendUrl = process.env.FRONTEND_URL || 'https://fyp-project-nine-gray.vercel.app';
+    frontendUrl = frontendUrl.replace(/\/*$/, ''); // Remove trailing slashes
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    const msg = {
+      to: email,
+      from: {
+        email: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        name: 'Booking System Security'
+      },
+      subject: 'Password Reset Request - Booking System',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Password Reset Request</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #FF9800; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+            .content { background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }
+            .button { display: inline-block; background-color: #FF9800; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+            .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            .footer { text-align: center; font-size: 12px; color: #666; margin-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>🔒 Password Reset Request</h1>
+          </div>
+          <div class="content">
+            <h2>Reset Your Password</h2>
+            <p>Hello,</p>
+            <p>We received a request to reset your password for your Booking System account. Click the button below to create a new password:</p>
+            <a href="${resetUrl}" class="button">Reset Password</a>
+            <p><strong>This link will expire in 15 minutes.</strong></p>
+            <div class="warning">
+              <strong>Security Notice:</strong> After resetting your password, you will need to verify your identity using the MFA code sent to your email.
+            </div>
+            <p>If the button doesn't work, copy and paste this link into your browser:</p>
+            <p>${resetUrl}</p>
+            <p><strong>If you didn't request a password reset, please ignore this email.</strong> Your password will remain unchanged.</p>
+          </div>
+          <div class="footer">
+            <p>This email was sent to ${email} for security purposes.</p>
+            <p>&copy; 2025 Booking System. All rights reserved.</p>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `Password Reset Request - Booking System
+
+Hello,
+
+We received a request to reset your password. Click this link to reset your password:
+
+${resetUrl}
+
+This link will expire in 15 minutes.
+
+IMPORTANT: After resetting your password, you will need to verify your identity using the MFA code sent to your email.
+
+If you didn't request this, please ignore this email.
+
+Thank you for using Booking System!`
+    };
+
+    const result = await sgMailClient.send(msg);
+    console.log('Password reset email sent successfully via SendGrid to:', email);
+    return result;
+  } catch (err) {
+    console.error('Error sending password reset email to', email, ':', err);
+    throw new Error(`Failed to send password reset email: ${err.message}`);
+  }
+};
+
+module.exports = { sendVerificationEmail, sendMfaEmail, sendPasswordResetEmail };
