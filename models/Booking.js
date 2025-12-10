@@ -26,8 +26,12 @@ const bookingSchema = new mongoose.Schema(
     },
     paymentCompletedAt: { type: Date },
     receiptUploads: { type: [receiptSchema], default: [] },
+    qrCode: { type: String, unique: true, required: true },
   },
   { timestamps: true }
 );
+
+// Create unique index for qrCode to prevent duplicates
+bookingSchema.index({ qrCode: 1 }, { unique: true });
 
 module.exports = mongoose.model('Booking', bookingSchema);

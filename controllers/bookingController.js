@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
+const { generateBookingQRCode } = require('../utils/qrCodeUtils');
 
 // Helper to parse optional dates safely
 function parseDate(value) {
@@ -62,6 +63,34 @@ exports.createBooking = async (req, res) => {
       totalAmount: amount
     });
     
+    // Generate unique QR code before creating booking
+    let qrCode;
+    try {
+      qrCode = await generateBookingQRCode({
+        userId,
+        serviceName: serviceName.trim(),
+        totalAmount: amount
+      });
+    } catch (qrError) {
+      console.error('[createBooking] QR code generation failed', {
+        error: qrError.message,
+        userId: userId.toString()
+      });
+      return res.status(500).json({
+        success: false,
+        errorCode: 'QR_CODE_GENERATION_FAILED',
+        message: 'Unable to generate unique QR code for booking',
+        error: process.env.NODE_ENV === 'production' 
+          ? 'Failed to generate booking identifier. Please try again.'
+          : qrError.message
+      });
+    }
+    
+    console.log('[createBooking] QR code generated, creating booking', {
+      qrCode,
+      userId: userId.toString()
+    });
+    
     // Create booking with validation
     const booking = await Booking.create({
       userId: userId,
@@ -71,6 +100,7 @@ exports.createBooking = async (req, res) => {
       totalAmount: amount,
       notes: notes ? notes.trim() : undefined,
       paymentStatus: 'pending',
+      qrCode: qrCode,
     });
 
     // Verify booking was actually saved
@@ -86,6 +116,7 @@ exports.createBooking = async (req, res) => {
       serviceName: booking.serviceName,
       totalAmount: booking.totalAmount,
       paymentStatus: booking.paymentStatus,
+      qrCode: booking.qrCode,
       createdAt: booking.createdAt
     });
 
@@ -97,10 +128,30 @@ exports.createBooking = async (req, res) => {
       message: 'Booking created successfully',
       success: true,
       booking: bookingData,
-      bookingId: booking._id.toString(),  //  Explicit booking ID for frontend
+      bookingId: booking._id.toString(),  //  Explicit booking ID for frontend
+      qrCode: booking.qrCode,
       paymentStatus: 'pending'
     });
   } catch (error) {
+    // Check for MongoDB duplicate key error (E11000)
+    if (error.code === 11000 || (error.name === 'MongoServerError' && error.message.includes('E11000'))) {
+      const duplicateField = error.message.includes('qrCode') ? 'qrCode' : 'unknown field';
+      console.error('[createBooking] Duplicate key error', {
+        errorCode: error.code,
+        field: duplicateField,
+        userId: req.user?.userId || 'UNKNOWN',
+        message: error.message
+      });
+      
+      return res.status(409).json({
+        success: false,
+        errorCode: 'DUPLICATE_QR_CODE',
+        message: 'A booking with this QR code already exists. Please try again.',
+        field: duplicateField,
+        retryable: true
+      });
+    }
+    
     console.error('[createBooking] EXCEPTION', {
       errorName: error.name,
       errorMessage: error.message,
