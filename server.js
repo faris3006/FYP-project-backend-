@@ -1,22 +1,52 @@
 const dotenv = require('dotenv');
 dotenv.config(); // Load environment variables FIRST
 
+// ===== VALIDATE ENVIRONMENT VARIABLES =====
+const requiredEnvVars = ['JWT_SECRET', 'DB_URI'];
+const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+
+if (missingVars.length > 0) {
+  console.error('⚠️  FATAL: Missing required environment variables:');
+  missingVars.forEach(v => console.error(`   - ${v}`));
+  console.error('Please ensure these are set in your Render environment variables.');
+  process.exit(1);
+}
+
+console.log('✅ Environment variables validated');
+
+// ===== LOAD DEPENDENCIES =====
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 const compression = require('compression');
-const authRoutes = require('./routes/authRoutes'); // Authentication routes
+
+// ===== LOAD ROUTES & MIDDLEWARE =====
+const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
-const authenticateJWT = require('./middleware/authenticateJWT'); // your JWT auth middleware
+const authenticateJWT = require('./middleware/authenticateJWT');
 const { sendVerificationEmail } = require('./utils/emailUtils');
 const { initializeSendGrid } = require('./config/emailConfig');
 
-// Initialize SendGrid on startup
-initializeSendGrid();
-
 const app = express();
+
+// ===== INITIALIZE SENDGRID (NON-BLOCKING) =====
+// Run SendGrid initialization in background to not block server startup
+setImmediate(() => {
+  try {
+    const initialized = initializeSendGrid();
+    if (initialized) {
+      console.log('✅ SendGrid initialized successfully');
+    } else {
+      console.warn('⚠️  SendGrid not available - email features will be disabled until configured');
+    }
+  } catch (err) {
+    console.warn('⚠️  SendGrid initialization error (continuing without email):', err.message);
+  }
+});
+
+// ===== MIDDLEWARE CONFIGURATION =====
 
 // Set request timeout to 60 seconds for slow connections
 app.use((req, res, next) => {
@@ -28,11 +58,12 @@ app.use((req, res, next) => {
 // Enable gzip compression for better performance on cellular networks
 try {
   app.use(compression());
+  console.log('✅ Compression middleware enabled');
 } catch (e) {
-  console.warn('Compression middleware not available, continuing without it');
+  console.warn('⚠️  Compression middleware not available, continuing without it');
 }
 
-// Middleware - CORS configuration
+// CORS configuration - Allow all origins in production, restrict in development
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -59,24 +90,30 @@ app.use(cors({
     if (allowedOrigins.includes(origin) || isVercelPreview) {
       callback(null, true);
     } else {
-      console.log('CORS blocked origin:', origin);
+      console.log('⚠️  CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
-})); // Enable CORS for frontend origins
+}));
+
+console.log('✅ CORS configured');
 
 // Body parser with size limits
-app.use(express.json({ limit: '50mb' })); // Body parser for JSON requests
-app.use(express.urlencoded({ extended: true, limit: '50mb' })); // For parsing URL-encoded data
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve uploaded receipts with proper cache headers
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   maxAge: '1d',
   etag: false
 }));
+
+console.log('✅ Static file serving configured');
+
+// ===== ROUTE HANDLERS =====
 
 // Root route for testing
 app.get('/', (req, res) => {
@@ -93,7 +130,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check endpoint
+// Health check endpoint (for Render deployment monitoring)
 app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
@@ -108,7 +145,10 @@ app.post('/api/test-email', (req, res) => {
   const { email } = req.body;
 
   if (!email) {
-    return res.status(400).json({ message: 'Email is required' });
+    return res.status(400).json({ 
+      success: false,
+      message: 'Email is required' 
+    });
   }
 
   try {
@@ -116,53 +156,42 @@ app.post('/api/test-email', (req, res) => {
     sendVerificationEmail(email, 'test-user-id');
 
     res.json({
+      success: true,
       message: 'Test email sent successfully!',
       email: email,
       note: 'Check your inbox for the verification email from the configured sender address.'
     });
   } catch (error) {
     console.error('Test email error:', error);
-    res.status(500).json({ message: 'Failed to send test email', error: error.message });
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to send test email', 
+      error: error.message 
+    });
   }
 });
 
-// Authentication Routes
-app.use('/api/auth', authRoutes); // Authentication-related routes (register, login)
+// Authentication Routes (NO JWT required)
+app.use('/api/auth', authRoutes);
 
-// Database Connection (MongoDB) with timeout and retry
-mongoose.connect(process.env.DB_URI, {
-  serverSelectionTimeoutMS: 5000,
-  connectTimeoutMS: 5000,
-  retryWrites: true,
-  w: 'majority'
-})
-  .then(() => console.log('Database connected successfully'))
-  .catch((error) => {
-    console.log('Database connection failed:', error.message);
-    // Retry connection after 5 seconds
-    setTimeout(() => {
-      console.log('Retrying database connection...');
-      mongoose.connect(process.env.DB_URI);
-    }, 5000);
-  });
-
-// Start Server
-const port = process.env.PORT || 5000; // Default port 5000 or the one in .env
-// Register routes before starting server
+// Booking Routes (JWT required)
 app.use('/api/bookings', authenticateJWT, bookingRoutes);
+
+// Admin Routes (JWT required)
 app.use('/api/admin', authenticateJWT, adminRoutes);
 
 // 404 Handler - Route not found
 app.use((req, res) => {
   res.status(404).json({
+    success: false,
     message: 'Route not found',
     path: req.path,
     method: req.method,
     availableEndpoints: {
       health: 'GET /health',
       root: 'GET /',
-      auth: 'POST /api/auth/register, /api/auth/login',
-      bookings: 'GET /api/bookings, POST /api/bookings',
+      auth: 'POST /api/auth/register, POST /api/auth/login',
+      bookings: 'GET /api/bookings, POST /api/bookings, GET /api/bookings/:id',
       admin: 'GET /api/admin/...'
     }
   });
@@ -170,27 +199,81 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error('Unexpected error:', err);
+  console.error('❌ Unexpected error:', err);
   res.status(err.status || 500).json({
+    success: false,
     message: err.message || 'Internal Server Error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
-const server = app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Backend URL: ${process.env.BACKEND_URL || 'http://localhost:' + port}`);
+// ===== DATABASE CONNECTION =====
+console.log('Connecting to database...');
+mongoose.connect(process.env.DB_URI, {
+  serverSelectionTimeoutMS: 10000, // Increased from 5s to 10s
+  connectTimeoutMS: 10000,
+  socketTimeoutMS: 45000, // Socket timeout
+  retryWrites: true,
+  w: 'majority'
+})
+  .then(() => {
+    console.log('✅ Database connected successfully');
+  })
+  .catch((error) => {
+    console.error('❌ Database connection failed:', error.message);
+    console.error('MongoDB connection error details:', {
+      code: error.code,
+      codeName: error.codeName,
+      message: error.message
+    });
+    console.error('Verify your DB_URI environment variable is correct');
+    // Don't exit - allow the app to start without database
+    // Queries will fail, but you can debug the connection issue
+    console.log('ℹ️  Continuing without database connection...');
+  });
+
+// ===== START SERVER =====
+const port = process.env.PORT || 5000;
+
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log('\n');
+  console.log('═══════════════════════════════════════════════════════');
+  console.log(`✅ Server is running on port ${port}`);
+  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`   Backend URL: ${process.env.BACKEND_URL || `http://localhost:${port}`}`);
+  console.log('═══════════════════════════════════════════════════════');
+  console.log('Available endpoints:');
+  console.log(`  Health: GET ${process.env.BACKEND_URL || `http://localhost:${port}`}/health`);
+  console.log(`  Bookings API: ${process.env.BACKEND_URL || `http://localhost:${port}`}/api/bookings`);
+  console.log('═══════════════════════════════════════════════════════\n');
 });
 
-// Handle graceful shutdown
+// ===== GRACEFUL SHUTDOWN =====
 process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
+  console.log('\n🛑 SIGTERM signal received: closing HTTP server');
   server.close(() => {
-    console.log('HTTP server closed');
+    console.log('✅ HTTP server closed');
     mongoose.connection.close(false, () => {
-      console.log('MongoDB connection closed');
+      console.log('✅ MongoDB connection closed');
       process.exit(0);
     });
   });
 });
+
+process.on('SIGINT', () => {
+  console.log('\n🛑 SIGINT signal received: closing HTTP server');
+  server.close(() => {
+    console.log('✅ HTTP server closed');
+    mongoose.connection.close(false, () => {
+      console.log('✅ MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+});
+
+// Unhandled promise rejection
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+module.exports = server;
