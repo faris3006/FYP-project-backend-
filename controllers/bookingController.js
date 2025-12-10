@@ -481,3 +481,132 @@ exports.uploadReceipt = async (req, res) => {
     });
   }
 };
+
+exports.updatePaymentStatus = async (req, res) => {
+  const { id } = req.params;
+  const { paymentStatus } = req.body;
+
+  console.log('[updatePaymentStatus] Request received', {
+    bookingId: id,
+    userId: req.user?.userId || 'MISSING',
+    requestedStatus: paymentStatus
+  });
+
+  try {
+    // Validate booking ID format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.warn('[updatePaymentStatus] Validation failed: Invalid booking ID format', { bookingId: id });
+      return res.status(400).json({ 
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        message: 'Invalid booking ID format',
+        bookingId: id
+      });
+    }
+
+    // Validate paymentStatus value
+    const validStatuses = ['pending', 'receipt_submitted', 'completed'];
+    if (!paymentStatus || !validStatuses.includes(paymentStatus)) {
+      console.warn('[updatePaymentStatus] Validation failed: Invalid payment status', {
+        bookingId: id,
+        providedStatus: paymentStatus,
+        validStatuses
+      });
+      return res.status(400).json({ 
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        message: `Invalid payment status. Must be one of: ${validStatuses.join(', ')}`,
+        field: 'paymentStatus',
+        validStatuses
+      });
+    }
+
+    // Ensure userId exists in the authenticated user's token
+    if (!req.user || !req.user.userId) {
+      console.error('[updatePaymentStatus] Authentication failed: No JWT token or userId found');
+      return res.status(401).json({ 
+        success: false,
+        errorCode: 'UNAUTHORIZED',
+        message: 'Unauthorized: User ID not found in token'
+      });
+    }
+
+    // Convert userId string to MongoDB ObjectId
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
+    console.log('[updatePaymentStatus] Attempting to update booking', {
+      bookingId: id,
+      userId: userId.toString(),
+      newStatus: paymentStatus
+    });
+
+    // Find the booking and ensure it belongs to the authenticated user
+    const booking = await Booking.findOne({
+      _id: new mongoose.Types.ObjectId(id),
+      userId: userId,
+    });
+
+    if (!booking) {
+      console.warn('[updatePaymentStatus] NOT_FOUND', { 
+        bookingId: id, 
+        userId: userId.toString() 
+      });
+      return res.status(404).json({ 
+        success: false,
+        errorCode: 'NOT_FOUND',
+        message: 'Booking not found or you do not have permission to update it',
+        bookingId: id
+      });
+    }
+
+    // Store old status for logging
+    const oldStatus = booking.paymentStatus;
+
+    // Update payment status
+    booking.paymentStatus = paymentStatus;
+
+    // If status is being set to 'completed', record the completion time
+    if (paymentStatus === 'completed' && !booking.paymentCompletedAt) {
+      booking.paymentCompletedAt = new Date();
+    }
+
+    // Save the updated booking
+    await booking.save();
+
+    console.log('[updatePaymentStatus] SUCCESS', {
+      bookingId: booking._id.toString(),
+      userId: userId.toString(),
+      oldStatus,
+      newStatus: paymentStatus,
+      paymentCompletedAt: booking.paymentCompletedAt
+    });
+
+    // Convert to plain object for clean serialization
+    const bookingData = booking.toObject();
+
+    res.json({ 
+      success: true,
+      message: 'Payment status updated successfully',
+      booking: bookingData,
+      bookingId: booking._id.toString(),
+      paymentStatus: booking.paymentStatus,
+      paymentCompletedAt: booking.paymentCompletedAt
+    });
+  } catch (error) {
+    console.error('[updatePaymentStatus] EXCEPTION', {
+      bookingId: id,
+      userId: req.user?.userId || 'UNKNOWN',
+      errorName: error.name,
+      errorMessage: error.message,
+      stack: error.stack
+    });
+    res.status(500).json({ 
+      success: false,
+      errorCode: 'STATUS_UPDATE_FAILED',
+      message: 'Unable to update payment status',
+      bookingId: id,
+      error: process.env.NODE_ENV === 'production' 
+        ? 'An error occurred while updating the payment status.'
+        : error.message
+    });
+  }
+};

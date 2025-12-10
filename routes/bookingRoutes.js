@@ -7,6 +7,7 @@ const {
   getUserBookings,
   getBookingById,
   uploadReceipt,
+  updatePaymentStatus,
 } = require('../controllers/bookingController');
 
 const router = express.Router();
@@ -43,6 +44,7 @@ const upload = multer({
 router.post('/', createBooking);
 router.get('/', getUserBookings);
 router.get('/:id', getBookingById);
+router.patch('/:id/status', updatePaymentStatus);
 router.post('/:id/receipt', upload.single('receipt'), uploadReceipt);
 
 // Multer/file validation errors bubble here
