@@ -45,7 +45,7 @@ router.post('/', createBooking);
 router.get('/', getUserBookings);
 router.get('/:id', getBookingById);
 router.patch('/:id/status', updatePaymentStatus);
-router.post('/:id/receipt', upload.single('receipt'), uploadReceipt);
+router.post('/:id/receipt-upload', upload.single('receipt'), uploadReceipt);
 
 // Multer/file validation errors bubble here
 router.use((err, req, res, next) => {
