@@ -24,15 +24,17 @@
 - ✅ SendGrid optional (graceful failure)
 - ✅ Clear startup logging
 
-**API:**
-- ✅ POST /api/bookings returns complete booking + bookingId + qrCode
-- ✅ GET /api/bookings/:id returns full booking for payment page
-- ✅ CORS allows frontend access
-- ✅ JWT authentication on protected routes
+**API Endpoints:**
+- ✅ POST /api/bookings - Create booking (returns bookingId, qrCode)
+- ✅ GET /api/bookings - List user's bookings
+- ✅ GET /api/bookings/:id - Fetch booking for payment page
+- ✅ PATCH /api/bookings/:id/status - Update payment status ← NEW!
+- ✅ POST /api/bookings/:id/receipt - Upload receipt
 
 **Payment Integration:**
 - ✅ Booking creation returns bookingId (navigate to /payment/:bookingId)
 - ✅ Payment page fetches booking details via GET /:id
+- ✅ Payment page updates status via PATCH /:id/status
 - ✅ All fields available: serviceName, totalAmount, qrCode, date, notes
 - ✅ totalAmount is numeric (not string)
 
@@ -160,6 +162,48 @@ For detailed explanations, see:
 - `RENDER_DEPLOYMENT_FIX.md` - Specific fixes and configuration
 - `RENDER_DEPLOYMENT_COMPLETE_REPORT.md` - Root cause analysis + code changes
 - `DEPLOYMENT_TROUBLESHOOTING.md` - Issue diagnosis guide
+- `PAYMENT_PAGE_INTEGRATION.md` - Payment page API reference
+
+---
+
+## 📡 Payment Status Update Endpoint
+
+**Endpoint:** `PATCH /api/bookings/:bookingId/status`  
+**Method:** `PATCH`
+
+**Request:**
+```javascript
+const response = await fetch(`/api/bookings/${bookingId}/status`, {
+  method: 'PATCH',
+  headers: {
+    'Authorization': `Bearer ${jwtToken}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    paymentStatus: 'completed'  // pending, receipt_submitted, or completed
+  })
+});
+
+const data = await response.json();
+console.log(data.paymentStatus);  // Updated status
+```
+
+**Valid Status Values:**
+- `"pending"` - Initial state
+- `"receipt_submitted"` - After receipt upload
+- `"completed"` - Payment finished
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Payment status updated successfully",
+  "booking": { /* complete booking object */ },
+  "bookingId": "string",
+  "paymentStatus": "completed",
+  "paymentCompletedAt": "2025-12-10T..."
+}
+```
 
 ---
 
