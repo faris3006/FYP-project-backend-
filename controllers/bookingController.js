@@ -12,8 +12,19 @@ exports.createBooking = async (req, res) => {
   const { serviceName, serviceDetails, scheduledDate, totalAmount, notes } = req.body;
   const amount = Number(totalAmount);
 
+  // Log incoming request
+  console.log('[createBooking] Request received', {
+    userId: req.user?.userId || 'MISSING',
+    serviceName: serviceName || 'MISSING',
+    totalAmount: totalAmount || 'MISSING',
+    hasServiceDetails: !!serviceDetails,
+    hasScheduledDate: !!scheduledDate,
+    hasNotes: !!notes
+  });
+
   // Validate required fields
   if (!serviceName || !serviceName.trim()) {
+    console.warn('[createBooking] Validation failed: serviceName is missing or empty');
     return res.status(400).json({
       success: false,
       errorCode: 'VALIDATION_ERROR',
@@ -23,6 +34,7 @@ exports.createBooking = async (req, res) => {
   }
 
   if (Number.isNaN(amount) || amount <= 0) {
+    console.warn('[createBooking] Validation failed: totalAmount is invalid', { totalAmount, amount });
     return res.status(400).json({
       success: false,
       errorCode: 'VALIDATION_ERROR',
@@ -33,6 +45,7 @@ exports.createBooking = async (req, res) => {
 
   // Ensure userId exists in the authenticated user's token
   if (!req.user || !req.user.userId) {
+    console.error('[createBooking] Authentication failed: No JWT token or userId found');
     return res.status(401).json({ 
       success: false,
       errorCode: 'UNAUTHORIZED',
@@ -43,6 +56,11 @@ exports.createBooking = async (req, res) => {
   try {
     // Convert userId string to MongoDB ObjectId for proper comparison
     const userId = new mongoose.Types.ObjectId(req.user.userId);
+    console.log('[createBooking] Validation passed, attempting MongoDB create', {
+      userId: userId.toString(),
+      serviceName: serviceName.trim(),
+      totalAmount: amount
+    });
     
     // Create booking with validation
     const booking = await Booking.create({
@@ -57,10 +75,19 @@ exports.createBooking = async (req, res) => {
 
     // Verify booking was actually saved
     if (!booking || !booking._id) {
-      throw new Error('Booking creation failed - no ID returned');
+      const error = new Error('Booking creation failed - no ID returned from MongoDB');
+      console.error('[createBooking] Verification failed:', error.message, { booking });
+      throw error;
     }
 
-    console.log(`Booking created successfully: ID=${booking._id}, User=${userId}, Amount=${amount}`);
+    console.log('[createBooking] SUCCESS', {
+      bookingId: booking._id.toString(),
+      userId: userId.toString(),
+      serviceName: booking.serviceName,
+      totalAmount: booking.totalAmount,
+      paymentStatus: booking.paymentStatus,
+      createdAt: booking.createdAt
+    });
 
     // Convert to plain object to ensure clean serialization
     const bookingData = booking.toObject();
@@ -74,7 +101,12 @@ exports.createBooking = async (req, res) => {
       paymentStatus: 'pending'
     });
   } catch (error) {
-    console.error('createBooking error:', error);
+    console.error('[createBooking] EXCEPTION', {
+      errorName: error.name,
+      errorMessage: error.message,
+      errorCode: error.code,
+      stack: error.stack
+    });
     
     // Return detailed error for debugging
     res.status(500).json({ 
@@ -89,25 +121,36 @@ exports.createBooking = async (req, res) => {
 };
 
 exports.getUserBookings = async (req, res) => {
+  console.log('[getUserBookings] Request received', {
+    userId: req.user?.userId || 'MISSING'
+  });
+
   try {
     // Ensure userId exists in the authenticated user's token
-      if (!req.user || !req.user.userId) {
-        return res.status(401).json({ 
-          success: false,
-          errorCode: 'UNAUTHORIZED',
-          message: 'Unauthorized: User ID not found in token'
-        });
+    if (!req.user || !req.user.userId) {
+      console.error('[getUserBookings] Authentication failed: No JWT token or userId found');
+      return res.status(401).json({ 
+        success: false,
+        errorCode: 'UNAUTHORIZED',
+        message: 'Unauthorized: User ID not found in token'
+      });
     }
 
     // Explicitly filter by the authenticated user's ID only
     // Convert userId string to MongoDB ObjectId for proper comparison
     const userId = new mongoose.Types.ObjectId(req.user.userId);
+    console.log('[getUserBookings] Attempting MongoDB query', { userId: userId.toString() });
+
     const bookings = await Booking.find({ userId: userId }).sort({ createdAt: -1 });
     
     // Convert to plain objects to ensure clean serialization
     const bookingsData = bookings.map(booking => booking.toObject());
     
-    console.log(`Fetched ${bookings.length} bookings for user ${userId}`);
+    console.log('[getUserBookings] SUCCESS', {
+      userId: userId.toString(),
+      count: bookings.length,
+      bookingIds: bookings.map(b => b._id.toString())
+    });
     
     res.json({ 
       success: true,
@@ -116,24 +159,35 @@ exports.getUserBookings = async (req, res) => {
       count: bookings.length
     });
   } catch (error) {
-    console.error('getUserBookings error:', error);
-      res.status(500).json({ 
-        success: false,
-        errorCode: 'BOOKINGS_FETCH_FAILED',
-        message: 'Unable to load bookings',
-        error: process.env.NODE_ENV === 'production' 
-          ? 'An error occurred while loading bookings.'
-          : error.message
-      });
+    console.error('[getUserBookings] EXCEPTION', {
+      userId: req.user?.userId || 'UNKNOWN',
+      errorName: error.name,
+      errorMessage: error.message,
+      stack: error.stack
+    });
+    res.status(500).json({ 
+      success: false,
+      errorCode: 'BOOKINGS_FETCH_FAILED',
+      message: 'Unable to load bookings',
+      error: process.env.NODE_ENV === 'production' 
+        ? 'An error occurred while loading bookings.'
+        : error.message
+    });
   }
 };
 
 exports.getBookingById = async (req, res) => {
   const { id } = req.params;
 
+  console.log('[getBookingById] Request received', {
+    bookingId: id,
+    userId: req.user?.userId || 'MISSING'
+  });
+
   try {
     // Ensure userId exists in the authenticated user's token
     if (!req.user || !req.user.userId) {
+      console.error('[getBookingById] Authentication failed: No JWT token or userId found');
       return res.status(401).json({ 
         success: false,
         errorCode: 'UNAUTHORIZED',
@@ -143,6 +197,7 @@ exports.getBookingById = async (req, res) => {
 
     // Validate booking ID format
     if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.warn('[getBookingById] Validation failed: Invalid booking ID format', { bookingId: id });
       return res.status(400).json({ 
         success: false,
         errorCode: 'VALIDATION_ERROR',
@@ -154,13 +209,18 @@ exports.getBookingById = async (req, res) => {
     // Explicitly ensure the booking belongs to the authenticated user
     // Convert userId string to MongoDB ObjectId for proper comparison
     const userId = new mongoose.Types.ObjectId(req.user.userId);
+    console.log('[getBookingById] Attempting MongoDB query', {
+      bookingId: id,
+      userId: userId.toString()
+    });
+
     const booking = await Booking.findOne({
       _id: new mongoose.Types.ObjectId(id),
       userId: userId,
     });
 
     if (!booking) {
-      console.warn(`Booking not found: ID=${id}, User=${userId}`);
+      console.warn('[getBookingById] NOT_FOUND', { bookingId: id, userId: userId.toString() });
       return res.status(404).json({ 
         success: false,
         errorCode: 'NOT_FOUND',
@@ -171,7 +231,12 @@ exports.getBookingById = async (req, res) => {
 
     // Verify booking data integrity
     if (!booking._id || !booking.userId || !booking.serviceName) {
-      console.error(`Booking data integrity issue: ID=${id}`, booking);
+      console.error('[getBookingById] Data integrity issue', {
+        bookingId: id,
+        hasId: !!booking._id,
+        hasUserId: !!booking.userId,
+        hasServiceName: !!booking.serviceName
+      });
       return res.status(500).json({ 
         success: false,
         errorCode: 'DATA_INTEGRITY',
@@ -179,6 +244,13 @@ exports.getBookingById = async (req, res) => {
         bookingId: id
       });
     }
+
+    console.log('[getBookingById] SUCCESS', {
+      bookingId: booking._id.toString(),
+      serviceName: booking.serviceName,
+      totalAmount: booking.totalAmount,
+      paymentStatus: booking.paymentStatus
+    });
 
     // Convert to plain object to ensure clean serialization
     const bookingData = booking.toObject();
@@ -190,7 +262,12 @@ exports.getBookingById = async (req, res) => {
       paymentStatus: booking.paymentStatus
     });
   } catch (error) {
-    console.error('getBookingById error:', error);
+    console.error('[getBookingById] EXCEPTION', {
+      bookingId: id,
+      errorName: error.name,
+      errorMessage: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ 
       success: false,
       errorCode: 'BOOKING_FETCH_FAILED',
@@ -206,7 +283,15 @@ exports.getBookingById = async (req, res) => {
 exports.uploadReceipt = async (req, res) => {
   const { id } = req.params;
 
+  console.log('[uploadReceipt] Request received', {
+    bookingId: id,
+    userId: req.user?.userId || 'MISSING',
+    hasFile: !!req.file,
+    fileName: req.file?.originalname || 'NONE'
+  });
+
   if (!req.file) {
+    console.warn('[uploadReceipt] Validation failed: No file uploaded', { bookingId: id });
     return res.status(400).json({ 
       success: false,
       errorCode: 'VALIDATION_ERROR',
@@ -218,6 +303,7 @@ exports.uploadReceipt = async (req, res) => {
   try {
     // Ensure userId exists in the authenticated user's token
     if (!req.user || !req.user.userId) {
+      console.error('[uploadReceipt] Authentication failed: No JWT token or userId found');
       return res.status(401).json({ 
         success: false,
         errorCode: 'UNAUTHORIZED',
@@ -227,6 +313,7 @@ exports.uploadReceipt = async (req, res) => {
 
     // Validate booking ID format
     if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.warn('[uploadReceipt] Validation failed: Invalid booking ID format', { bookingId: id });
       return res.status(400).json({ 
         success: false,
         errorCode: 'VALIDATION_ERROR',
@@ -238,13 +325,18 @@ exports.uploadReceipt = async (req, res) => {
     // Explicitly ensure the booking belongs to the authenticated user
     // Convert userId string to MongoDB ObjectId for proper comparison
     const userId = new mongoose.Types.ObjectId(req.user.userId);
+    console.log('[uploadReceipt] Attempting MongoDB query', {
+      bookingId: id,
+      userId: userId.toString()
+    });
+
     const booking = await Booking.findOne({
       _id: new mongoose.Types.ObjectId(id),
       userId: userId,
     });
 
     if (!booking) {
-      console.warn(`Receipt upload failed - booking not found: ID=${id}, User=${userId}`);
+      console.warn('[uploadReceipt] NOT_FOUND', { bookingId: id, userId: userId.toString() });
       return res.status(404).json({ 
         success: false,
         errorCode: 'NOT_FOUND',
@@ -255,7 +347,11 @@ exports.uploadReceipt = async (req, res) => {
 
     // Validate file upload
     if (!req.file.filename || !req.file.size) {
-      console.error(`File validation failed for booking ${id}`);
+      console.error('[uploadReceipt] File validation failed', {
+        bookingId: id,
+        hasFilename: !!req.file.filename,
+        hasSize: !!req.file.size
+      });
       return res.status(400).json({ 
         success: false,
         errorCode: 'VALIDATION_ERROR',
@@ -267,6 +363,13 @@ exports.uploadReceipt = async (req, res) => {
     let backendUrl = process.env.BACKEND_URL || 'https://fyp-project-backend.onrender.com';
     backendUrl = backendUrl.replace(/\/*$/, ''); // ensure no trailing slash
     const receiptUrl = `${backendUrl}/uploads/receipts/${req.file.filename}`;
+
+    console.log('[uploadReceipt] Attempting MongoDB update', {
+      bookingId: id,
+      fileName: req.file.filename,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype
+    });
 
     // Add receipt to booking
     booking.receiptUploads.push({
@@ -282,10 +385,19 @@ exports.uploadReceipt = async (req, res) => {
 
     // Verify receipt was saved
     if (!booking.receiptUploads || booking.receiptUploads.length === 0) {
-      throw new Error('Receipt metadata not saved to booking');
+      const error = new Error('Receipt metadata not saved to booking');
+      console.error('[uploadReceipt] Verification failed:', error.message, { bookingId: id });
+      throw error;
     }
 
-    console.log(`Receipt uploaded successfully: BookingID=${id}, File=${req.file.filename}, User=${userId}`);
+    console.log('[uploadReceipt] SUCCESS', {
+      bookingId: booking._id.toString(),
+      userId: userId.toString(),
+      fileName: req.file.filename,
+      fileSize: req.file.size,
+      receiptCount: booking.receiptUploads.length,
+      paymentStatus: booking.paymentStatus
+    });
 
     // Convert to plain object to ensure clean serialization
     const bookingData = booking.toObject();
@@ -300,7 +412,13 @@ exports.uploadReceipt = async (req, res) => {
       receiptFile: req.file.filename
     });
   } catch (error) {
-    console.error('uploadReceipt error:', error);
+    console.error('[uploadReceipt] EXCEPTION', {
+      bookingId: id,
+      userId: req.user?.userId || 'UNKNOWN',
+      errorName: error.name,
+      errorMessage: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ 
       success: false,
       errorCode: 'RECEIPT_UPLOAD_FAILED',
