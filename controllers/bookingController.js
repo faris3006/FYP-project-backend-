@@ -193,17 +193,58 @@ exports.getUserBookings = async (req, res) => {
     console.log('[getUserBookings] Attempting MongoDB query', { userId: userId.toString() });
 
     const bookings = await Booking.find({ userId: userId }).sort({ createdAt: -1 });
-    
-    // Convert to plain objects to ensure clean serialization
-    const bookingsData = bookings.map(booking => booking.toObject());
-    
+
+    // Expand and normalize each booking for frontend
+    const bookingsData = bookings.map(booking => {
+      const b = booking.toObject();
+      // Parse serviceDetails if it's a JSON string
+      let details = {};
+      if (typeof b.serviceDetails === 'string') {
+        try {
+          details = JSON.parse(b.serviceDetails);
+        } catch (e) {
+          details = {};
+        }
+      } else if (typeof b.serviceDetails === 'object' && b.serviceDetails !== null) {
+        details = b.serviceDetails;
+      }
+
+      // Ensure all expected fields are present (default to null if missing)
+      const expandedDetails = {
+        eventType: details.eventType || null,
+        numPeople: details.numPeople || null,
+        foodPackage: details.foodPackage || null,
+        selectedSides: details.selectedSides || null,
+        drink: details.drink || null,
+        dessert: details.dessert || null,
+        notes: details.notes || details.specialRequests || null
+      };
+
+      return {
+        id: b._id?.toString() || b.id?.toString() || null,
+        _id: b._id?.toString() || null,
+        serviceName: b.serviceName,
+        serviceDetails: expandedDetails,
+        scheduledDate: b.scheduledDate,
+        totalAmount: b.totalAmount,
+        paymentStatus: b.paymentStatus,
+        status: b.paymentStatus, // alias for frontend mapping
+        notes: b.notes,
+        receiptUploads: b.receiptUploads,
+        qrCode: b.qrCode,
+        createdAt: b.createdAt,
+        updatedAt: b.updatedAt,
+        paymentCompletedAt: b.paymentCompletedAt
+      };
+    });
+
     console.log('[getUserBookings] SUCCESS', {
       userId: userId.toString(),
       count: bookings.length,
       bookingIds: bookings.map(b => b._id.toString())
     });
-    
-    res.json({ 
+
+    res.json({
       success: true,
       message: `Retrieved ${bookings.length} booking(s)`,
       bookings: bookingsData,
