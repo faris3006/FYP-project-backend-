@@ -560,10 +560,8 @@ exports.updatePaymentStatus = async (req, res) => {
 
     // Validate paymentStatus value
     const validStatuses = ['pending', 'receipt_submitted', 'completed'];
-      const bookings = await Booking.find({ userId: userId }).sort({ createdAt: -1 });
+    if (!paymentStatus || !validStatuses.includes(paymentStatus)) {
       console.warn('[updatePaymentStatus] Validation failed: Invalid payment status', {
-      // Normalize for frontend consumption
-      const bookingsData = bookings.map(normalizeBookingForResponse);
         bookingId: id,
         providedStatus: paymentStatus,
         validStatuses
