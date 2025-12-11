@@ -14,6 +14,62 @@ function verifyAdmin(req, res, next) {
   next();
 }
 
+// Normalize booking shape for admin/frontends
+function normalizeBooking(booking) {
+  if (!booking) return null;
+  const b = booking.toObject ? booking.toObject() : booking;
+
+  let details = {};
+  if (typeof b.serviceDetails === "string") {
+    try {
+      details = JSON.parse(b.serviceDetails);
+    } catch (e) {
+      details = {};
+    }
+  } else if (typeof b.serviceDetails === "object" && b.serviceDetails !== null) {
+    details = b.serviceDetails;
+  }
+
+  const expandedDetails = {
+    eventType: details.eventType || null,
+    numPeople: details.numPeople || null,
+    foodPackage: details.foodPackage || null,
+    selectedSides: details.selectedSides || null,
+    drink: details.drink || null,
+    dessert: details.dessert || null,
+    notes: details.notes || details.specialRequests || null,
+    specialRequests: details.specialRequests || details.notes || null,
+  };
+
+  const userInfo = b.userId && typeof b.userId === "object" && b.userId._id
+    ? {
+        id: b.userId._id.toString(),
+        name: b.userId.name,
+        email: b.userId.email,
+        phone: b.userId.phone,
+      }
+    : null;
+
+  return {
+    id: b._id ? b._id.toString() : null,
+    _id: b._id ? b._id.toString() : null,
+    user: userInfo,
+    userId: b.userId?._id?.toString?.() || b.userId || null,
+    serviceName: b.serviceName,
+    serviceDetails: expandedDetails,
+    scheduledDate: b.scheduledDate,
+    totalAmount: b.totalAmount,
+    paymentStatus: b.paymentStatus,
+    status: b.paymentStatus,
+    notes: b.notes,
+    receiptUploads: b.receiptUploads,
+    qrCode: b.qrCode,
+    paymentCompletedAt: b.paymentCompletedAt,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+  };
+}
+
 // Get all users (exclude sensitive info)
 router.get("/users", verifyAdmin, async (req, res) => {
   try {
@@ -63,7 +119,9 @@ router.get("/bookings/receipt-queue", verifyAdmin, async (req, res) => {
     const bookings = await Booking.find({ paymentStatus: "receipt_submitted" })
       .populate("userId", "name email phone")
       .sort({ createdAt: -1 });
-    res.json({ bookings });
+
+    const data = bookings.map(normalizeBooking);
+    res.json({ bookings: data });
   } catch (error) {
     console.error("Error fetching receipt queue:", error);
     res.status(500).json({ message: "Server error", error: error.message });
@@ -75,10 +133,10 @@ router.get("/bookings/history", verifyAdmin, async (req, res) => {
   try {
     const bookings = await Booking.find()
       .populate("userId", "name email phone")
-      // Primary sort: creation time (when user submitted booking)
-      // Secondary sort: latest status change
       .sort({ createdAt: -1, updatedAt: -1 });
-    res.json({ bookings });
+
+    const data = bookings.map(normalizeBooking);
+    res.json({ bookings: data });
   } catch (error) {
     console.error("Error fetching booking history:", error);
     res.status(500).json({ message: "Server error", error: error.message });
@@ -91,7 +149,9 @@ router.get("/bookings", verifyAdmin, async (req, res) => {
     const bookings = await Booking.find()
       .populate("userId", "name email phone")
       .sort({ createdAt: -1 });
-    res.json({ bookings });
+
+    const data = bookings.map(normalizeBooking);
+    res.json({ bookings: data });
   } catch (error) {
     console.error("Error fetching bookings:", error);
     res.status(500).json({ message: "Server error", error: error.message });
@@ -137,7 +197,7 @@ router.put("/bookings/:id/payment", verifyAdmin, async (req, res) => {
 
     await booking.save();
 
-    res.json({ message: "Payment status updated", booking });
+    res.json({ message: "Payment status updated", booking: normalizeBooking(booking) });
   } catch (error) {
     console.error("admin update booking error:", error);
     res.status(500).json({ message: "Server error" });
@@ -169,7 +229,7 @@ router.post("/bookings/:id/approve", verifyAdmin, async (req, res) => {
 
     res.json({ 
       message: "Receipt approved successfully", 
-      booking 
+      booking: normalizeBooking(booking) 
     });
   } catch (error) {
     console.error("Error approving receipt:", error);
@@ -211,7 +271,7 @@ router.post("/bookings/:id/reject", verifyAdmin, async (req, res) => {
 
     res.json({ 
       message: "Receipt rejected successfully", 
-      booking 
+      booking: normalizeBooking(booking) 
     });
   } catch (error) {
     console.error("Error rejecting receipt:", error);
@@ -230,7 +290,7 @@ router.get("/bookings/:id", verifyAdmin, async (req, res) => {
       return res.status(404).json({ message: "Booking not found" });
     }
 
-    res.json({ booking });
+    res.json({ booking: normalizeBooking(booking) });
   } catch (error) {
     console.error("Error fetching booking:", error);
     res.status(500).json({ message: "Server error", error: error.message });

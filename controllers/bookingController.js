@@ -9,6 +9,52 @@ function parseDate(value) {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
+// Normalize booking shape for client consumption
+function normalizeBookingForResponse(booking) {
+  if (!booking) return null;
+  const b = booking.toObject ? booking.toObject() : booking;
+
+  let details = {};
+  if (typeof b.serviceDetails === 'string') {
+    try {
+      details = JSON.parse(b.serviceDetails);
+    } catch (e) {
+      details = {};
+    }
+  } else if (typeof b.serviceDetails === 'object' && b.serviceDetails !== null) {
+    details = b.serviceDetails;
+  }
+
+  const expandedDetails = {
+    eventType: details.eventType || null,
+    numPeople: details.numPeople || null,
+    foodPackage: details.foodPackage || null,
+    selectedSides: details.selectedSides || null,
+    drink: details.drink || null,
+    dessert: details.dessert || null,
+    notes: details.notes || details.specialRequests || null,
+    specialRequests: details.specialRequests || details.notes || null,
+  };
+
+  return {
+    id: b._id ? b._id.toString() : null,
+    _id: b._id ? b._id.toString() : null,
+    userId: b.userId?.toString?.() || b.userId || null,
+    serviceName: b.serviceName,
+    serviceDetails: expandedDetails,
+    scheduledDate: b.scheduledDate,
+    totalAmount: b.totalAmount,
+    paymentStatus: b.paymentStatus,
+    status: b.paymentStatus,
+    notes: b.notes,
+    receiptUploads: b.receiptUploads,
+    qrCode: b.qrCode,
+    paymentCompletedAt: b.paymentCompletedAt,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+  };
+}
+
 exports.createBooking = async (req, res) => {
   const { serviceName, serviceDetails, scheduledDate, totalAmount, notes } = req.body;
   const amount = Number(totalAmount);
@@ -194,49 +240,8 @@ exports.getUserBookings = async (req, res) => {
 
     const bookings = await Booking.find({ userId: userId }).sort({ createdAt: -1 });
 
-    // Expand and normalize each booking for frontend
-    const bookingsData = bookings.map(booking => {
-      const b = booking.toObject();
-      // Parse serviceDetails if it's a JSON string
-      let details = {};
-      if (typeof b.serviceDetails === 'string') {
-        try {
-          details = JSON.parse(b.serviceDetails);
-        } catch (e) {
-          details = {};
-        }
-      } else if (typeof b.serviceDetails === 'object' && b.serviceDetails !== null) {
-        details = b.serviceDetails;
-      }
-
-      // Ensure all expected fields are present (default to null if missing)
-      const expandedDetails = {
-        eventType: details.eventType || null,
-        numPeople: details.numPeople || null,
-        foodPackage: details.foodPackage || null,
-        selectedSides: details.selectedSides || null,
-        drink: details.drink || null,
-        dessert: details.dessert || null,
-        notes: details.notes || details.specialRequests || null
-      };
-
-      return {
-        id: b._id?.toString() || b.id?.toString() || null,
-        _id: b._id?.toString() || null,
-        serviceName: b.serviceName,
-        serviceDetails: expandedDetails,
-        scheduledDate: b.scheduledDate,
-        totalAmount: b.totalAmount,
-        paymentStatus: b.paymentStatus,
-        status: b.paymentStatus, // alias for frontend mapping
-        notes: b.notes,
-        receiptUploads: b.receiptUploads,
-        qrCode: b.qrCode,
-        createdAt: b.createdAt,
-        updatedAt: b.updatedAt,
-        paymentCompletedAt: b.paymentCompletedAt
-      };
-    });
+    // Normalize for frontend consumption
+    const bookingsData = bookings.map(normalizeBookingForResponse);
 
     console.log('[getUserBookings] SUCCESS', {
       userId: userId.toString(),
@@ -344,8 +349,7 @@ exports.getBookingById = async (req, res) => {
       paymentStatus: booking.paymentStatus
     });
 
-    // Convert to plain object to ensure clean serialization
-    const bookingData = booking.toObject();
+    const bookingData = normalizeBookingForResponse(booking);
     
     res.json({ 
       success: true,
@@ -491,8 +495,7 @@ exports.uploadReceipt = async (req, res) => {
       paymentStatus: booking.paymentStatus
     });
 
-    // Convert to plain object to ensure clean serialization
-    const bookingData = booking.toObject();
+    const bookingData = normalizeBookingForResponse(booking);
     
     res.json({ 
       message: 'Receipt uploaded successfully',
@@ -547,8 +550,10 @@ exports.updatePaymentStatus = async (req, res) => {
 
     // Validate paymentStatus value
     const validStatuses = ['pending', 'receipt_submitted', 'completed'];
-    if (!paymentStatus || !validStatuses.includes(paymentStatus)) {
+      const bookings = await Booking.find({ userId: userId }).sort({ createdAt: -1 });
       console.warn('[updatePaymentStatus] Validation failed: Invalid payment status', {
+      // Normalize for frontend consumption
+      const bookingsData = bookings.map(normalizeBookingForResponse);
         bookingId: id,
         providedStatus: paymentStatus,
         validStatuses
@@ -621,8 +626,7 @@ exports.updatePaymentStatus = async (req, res) => {
       paymentCompletedAt: booking.paymentCompletedAt
     });
 
-    // Convert to plain object for clean serialization
-    const bookingData = booking.toObject();
+    const bookingData = normalizeBookingForResponse(booking);
 
     res.json({ 
       success: true,
