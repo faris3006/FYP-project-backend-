@@ -36,6 +36,14 @@ function normalizeBookingForResponse(booking) {
     specialRequests: details.specialRequests || details.notes || null,
   };
 
+  // Extract receipt metadata for easy frontend access
+  const latestReceipt = b.receiptUploads && b.receiptUploads.length > 0 
+    ? b.receiptUploads[b.receiptUploads.length - 1] 
+    : null;
+  
+  const receiptFileName = latestReceipt ? latestReceipt.filename : null;
+  const receiptUrl = latestReceipt ? latestReceipt.url : null;
+
   return {
     id: b._id ? b._id.toString() : null,
     _id: b._id ? b._id.toString() : null,
@@ -47,7 +55,9 @@ function normalizeBookingForResponse(booking) {
     paymentStatus: b.paymentStatus,
     status: b.paymentStatus,
     notes: b.notes,
-    receiptUploads: b.receiptUploads,
+    receiptUploads: b.receiptUploads || [],
+    receiptFileName: receiptFileName,
+    receiptUrl: receiptUrl,
     qrCode: b.qrCode,
     paymentCompletedAt: b.paymentCompletedAt,
     createdAt: b.createdAt,
