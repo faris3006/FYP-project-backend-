@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const authenticateJWT = require('../middleware/authenticateJWT');
 const {
   createBooking,
   getUserBookings,
@@ -40,6 +41,9 @@ const upload = multer({
   fileFilter,
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
 });
+
+// Apply JWT authentication to all booking routes
+router.use(authenticateJWT);
 
 router.post('/', createBooking);
 router.get('/', getUserBookings);
