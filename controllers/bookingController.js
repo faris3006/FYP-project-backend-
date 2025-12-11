@@ -538,12 +538,16 @@ exports.uploadReceipt = async (req, res) => {
 
 exports.updatePaymentStatus = async (req, res) => {
   const { id } = req.params;
-  const { paymentStatus } = req.body;
+  let { paymentStatus, status } = req.body;
+
+  // Accept both 'paymentStatus' and 'status' field names
+  let statusValue = paymentStatus || status;
 
   console.log('[updatePaymentStatus] Request received', {
     bookingId: id,
     userId: req.user?.userId || 'MISSING',
-    requestedStatus: paymentStatus
+    requestedStatus: statusValue,
+    userRole: req.user?.role || 'UNKNOWN'
   });
 
   try {
@@ -558,12 +562,19 @@ exports.updatePaymentStatus = async (req, res) => {
       });
     }
 
+    // Normalize status aliases (frontend may send 'approved' instead of 'completed')
+    if (statusValue === 'approved' || statusValue === 'paid') {
+      statusValue = 'completed';
+    } else if (statusValue === 'receipt-submitted' || statusValue === 'receipt_submitted') {
+      statusValue = 'receipt_submitted';
+    }
+
     // Validate paymentStatus value
-    const validStatuses = ['pending', 'receipt_submitted', 'completed'];
-    if (!paymentStatus || !validStatuses.includes(paymentStatus)) {
+    const validStatuses = ['pending', 'receipt_submitted', 'completed', 'rejected'];
+    if (!statusValue || !validStatuses.includes(statusValue)) {
       console.warn('[updatePaymentStatus] Validation failed: Invalid payment status', {
         bookingId: id,
-        providedStatus: paymentStatus,
+        providedStatus: statusValue,
         validStatuses
       });
       return res.status(400).json({ 
@@ -575,7 +586,7 @@ exports.updatePaymentStatus = async (req, res) => {
       });
     }
 
-    // Ensure userId exists in the authenticated user's token
+    // Ensure user is authenticated
     if (!req.user || !req.user.userId) {
       console.error('[updatePaymentStatus] Authentication failed: No JWT token or userId found');
       return res.status(401).json({ 
@@ -585,24 +596,38 @@ exports.updatePaymentStatus = async (req, res) => {
       });
     }
 
-    // Convert userId string to MongoDB ObjectId
-    const userId = new mongoose.Types.ObjectId(req.user.userId);
+    // Try to find booking by ID first (works for both users and admins)
+    let booking = await Booking.findById(id);
+
+    // If not found, or if user is not admin and booking belongs to someone else, check ownership
+    if (booking && req.user.role !== 'admin') {
+      // Non-admin users can only update their own bookings
+      const userId = new mongoose.Types.ObjectId(req.user.userId);
+      const bookingUserId = booking.userId.toString ? booking.userId.toString() : booking.userId;
+      const currentUserId = userId.toString();
+      
+      if (bookingUserId !== currentUserId) {
+        console.warn('[updatePaymentStatus] Permission denied', {
+          bookingId: id,
+          bookingOwner: bookingUserId,
+          requestingUser: currentUserId
+        });
+        booking = null; // Treat as not found to maintain security
+      }
+    }
+
     console.log('[updatePaymentStatus] Attempting to update booking', {
       bookingId: id,
-      userId: userId.toString(),
-      newStatus: paymentStatus
-    });
-
-    // Find the booking and ensure it belongs to the authenticated user
-    const booking = await Booking.findOne({
-      _id: new mongoose.Types.ObjectId(id),
-      userId: userId,
+      userRole: req.user.role || 'user',
+      isAdmin: req.user.role === 'admin',
+      newStatus: statusValue,
+      bookingFound: !!booking
     });
 
     if (!booking) {
       console.warn('[updatePaymentStatus] NOT_FOUND', { 
         bookingId: id, 
-        userId: userId.toString() 
+        userRole: req.user.role
       });
       return res.status(404).json({ 
         success: false,
@@ -616,11 +641,14 @@ exports.updatePaymentStatus = async (req, res) => {
     const oldStatus = booking.paymentStatus;
 
     // Update payment status
-    booking.paymentStatus = paymentStatus;
+    booking.paymentStatus = statusValue;
 
     // If status is being set to 'completed', record the completion time
-    if (paymentStatus === 'completed' && !booking.paymentCompletedAt) {
+    if (statusValue === 'completed' && !booking.paymentCompletedAt) {
       booking.paymentCompletedAt = new Date();
+    } else if (statusValue !== 'completed') {
+      // Clear completion time if status changes away from completed
+      booking.paymentCompletedAt = undefined;
     }
 
     // Save the updated booking
@@ -628,9 +656,9 @@ exports.updatePaymentStatus = async (req, res) => {
 
     console.log('[updatePaymentStatus] SUCCESS', {
       bookingId: booking._id.toString(),
-      userId: userId.toString(),
+      userRole: req.user.role,
       oldStatus,
-      newStatus: paymentStatus,
+      newStatus: statusValue,
       paymentCompletedAt: booking.paymentCompletedAt
     });
 

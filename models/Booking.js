@@ -21,7 +21,7 @@ const bookingSchema = new mongoose.Schema(
     notes: { type: String },
     paymentStatus: {
       type: String,
-      enum: ['pending', 'receipt_submitted', 'completed'],
+      enum: ['pending', 'receipt_submitted', 'completed', 'rejected'],
       default: 'pending',
     },
     paymentCompletedAt: { type: Date },
