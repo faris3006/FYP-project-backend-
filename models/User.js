@@ -17,6 +17,10 @@ const userSchema = new mongoose.Schema({
   temporaryLockUntil: { type: Date, default: null },
   permanentlyLocked: { type: Boolean, default: false },
   lockoutStage: { type: Number, default: 0 }, // 0 = no failures, 1 = after first 3 failures, 2 = permanently locked
+  // Single active session fields
+  activeSessionToken: { type: String, default: null },
+  activeDevice: { type: String, default: null },
+  sessionCreatedAt: { type: Date, default: null },
 });
 
 module.exports = mongoose.model('User', userSchema);

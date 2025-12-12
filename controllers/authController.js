@@ -179,17 +179,66 @@ const sendMFA = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    // Check if user already has an active session on another device
+    if (user.activeSessionToken) {
+      return res.status(403).json({ 
+        message: 'Account is already logged in on another device or browser. Please logout from that device first.',
+        isActiveSessionBlocked: true
+      });
+    }
+
     // Validate MFA code
     const isValidMFA = await validateMFA(user, mfaCode);
     if (!isValidMFA.success) {
       return res.status(400).json({ message: isValidMFA.message });
     }
 
-    res.status(200).json({ message: 'MFA verified successfully' });
+    // Generate JWT token and store it as active session
+    const token = jwt.sign({ userId: user._id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    
+    // Store active session info
+    user.activeSessionToken = token;
+    user.activeDevice = req.headers['user-agent'] || 'Unknown Device';
+    user.sessionCreatedAt = new Date();
+    await user.save();
+
+    res.status(200).json({ 
+      message: 'MFA verified successfully',
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
+    });
   } catch (error) {
     console.error('Error in sendMFA:', error);
     res.status(500).json({ message: 'Server error during MFA verification' });
   }
 };
 
-module.exports = { registerUser, loginUser, verifyEmail, sendMFA };
+// Logout user
+const logoutUser = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Clear active session
+    user.activeSessionToken = null;
+    user.activeDevice = null;
+    user.sessionCreatedAt = null;
+    await user.save();
+
+    res.status(200).json({ message: 'Logout successful' });
+  } catch (error) {
+    console.error('Error in logoutUser:', error);
+    res.status(500).json({ message: 'Server error during logout' });
+  }
+};
+
+module.exports = { registerUser, loginUser, verifyEmail, sendMFA, logoutUser };
