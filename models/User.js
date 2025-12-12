@@ -12,6 +12,11 @@ const userSchema = new mongoose.Schema({
   lastMfaVerifiedAt: { type: Date },
   resetToken: { type: String, default: null },
   resetTokenExpiry: { type: Date, default: null },
+  // Login lockout fields
+  failedLoginAttempts: { type: Number, default: 0 },
+  temporaryLockUntil: { type: Date, default: null },
+  permanentlyLocked: { type: Boolean, default: false },
+  lockoutStage: { type: Number, default: 0 }, // 0 = no failures, 1 = after first 3 failures, 2 = permanently locked
 });
 
 module.exports = mongoose.model('User', userSchema);

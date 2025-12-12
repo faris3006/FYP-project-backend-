@@ -48,15 +48,86 @@ const loginUser = async (req, res) => {
       return res.status(400).json({ message: 'User not found' });
     }
 
+    // Check if permanently locked
+    if (user.permanentlyLocked) {
+      return res.status(403).json({ 
+        message: 'Your account is permanently locked due to multiple failed login attempts. Please use "Forgot Password" to reset your password.',
+        isPermanentlyLocked: true 
+      });
+    }
+
+    // Check if temporarily locked
+    if (user.temporaryLockUntil && new Date() < user.temporaryLockUntil) {
+      const remainingTime = Math.ceil((user.temporaryLockUntil - new Date()) / 1000 / 60); // minutes
+      return res.status(403).json({ 
+        message: 'You cannot enter the password',
+        isTemporarilyLocked: true,
+        remainingMinutes: remainingTime,
+        lockUntil: user.temporaryLockUntil
+      });
+    }
+
+    // If temporary lock has expired, reset for second chance
+    if (user.temporaryLockUntil && new Date() >= user.temporaryLockUntil && user.lockoutStage === 1) {
+      user.failedLoginAttempts = 0;
+      user.temporaryLockUntil = null;
+      // Keep lockoutStage at 1 to track that this is the second chance
+      await user.save();
+    }
+
     // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid password' });
+      // Increment failed attempts
+      user.failedLoginAttempts += 1;
+
+      // First set of 3 attempts (lockoutStage 0)
+      if (user.lockoutStage === 0 && user.failedLoginAttempts >= 3) {
+        // Apply 5-minute temporary lock
+        user.temporaryLockUntil = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+        user.lockoutStage = 1;
+        await user.save();
+        
+        return res.status(403).json({ 
+          message: 'Too many failed attempts. Your account is temporarily locked for 5 minutes.',
+          isTemporarilyLocked: true,
+          remainingMinutes: 5,
+          lockUntil: user.temporaryLockUntil
+        });
+      }
+
+      // Second set of 3 attempts (lockoutStage 1, after 5-min lock expired)
+      if (user.lockoutStage === 1 && user.failedLoginAttempts >= 3) {
+        // Apply permanent lock
+        user.permanentlyLocked = true;
+        user.lockoutStage = 2;
+        await user.save();
+        
+        return res.status(403).json({ 
+          message: 'Your account is permanently locked due to multiple failed login attempts. Please use "Forgot Password" to reset your password.',
+          isPermanentlyLocked: true
+        });
+      }
+
+      await user.save();
+      
+      const remainingAttempts = 3 - user.failedLoginAttempts;
+      return res.status(400).json({ 
+        message: 'Invalid password',
+        remainingAttempts: remainingAttempts > 0 ? remainingAttempts : 0
+      });
     }
 
     if (!user.isVerified) {
       return res.status(400).json({ message: 'Please verify your email before login' });
     }
+
+    // Password is correct - reset all lockout fields
+    user.failedLoginAttempts = 0;
+    user.temporaryLockUntil = null;
+    user.permanentlyLocked = false;
+    user.lockoutStage = 0;
+    await user.save();
 
     // Generate MFA code and send via email
     await generateMFA(user);

@@ -445,6 +445,13 @@ router.post('/reset-password', async (req, res) => {
     user.lastMfaVerifiedAt = null; // FORCE MFA RE-VERIFICATION
     user.resetToken = null; // Clear reset token
     user.resetTokenExpiry = null; // Clear expiry
+    
+    // Reset all lockout fields when password is reset
+    user.failedLoginAttempts = 0;
+    user.temporaryLockUntil = null;
+    user.permanentlyLocked = false;
+    user.lockoutStage = 0;
+    
     await user.save();
 
     console.log('Password reset successful for user:', user.email);
