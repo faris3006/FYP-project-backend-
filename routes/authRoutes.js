@@ -59,7 +59,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// User Login Route
+// User Login Route with temporary/permanent lockout enforcement
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -107,14 +107,81 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
+    // Permanent lock check
+    if (currentUser.permanentlyLocked) {
+      return res.status(403).json({
+        message: 'Your account is permanently locked due to multiple failed login attempts. Please use "Forgot Password" to reset your password.',
+        isPermanentlyLocked: true,
+      });
+    }
+
+    // Temporary lock check
+    if (currentUser.temporaryLockUntil && new Date() < currentUser.temporaryLockUntil) {
+      const remainingTime = Math.ceil((currentUser.temporaryLockUntil - new Date()) / 1000 / 60);
+      return res.status(403).json({
+        message: 'You cannot enter the password',
+        isTemporarilyLocked: true,
+        remainingMinutes: remainingTime,
+        lockUntil: currentUser.temporaryLockUntil,
+      });
+    }
+
+    // If temporary lock expired after first lockout, reset attempts for second chance
+    if (currentUser.temporaryLockUntil && new Date() >= currentUser.temporaryLockUntil && currentUser.lockoutStage === 1) {
+      currentUser.failedLoginAttempts = 0;
+      currentUser.temporaryLockUntil = null;
+      await currentUser.save();
+    }
+
+    // Password check with lockout updates
     const isMatch = await bcrypt.compare(password, currentUser.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid email or password.' });
+      currentUser.failedLoginAttempts += 1;
+
+      // First set of 3 attempts -> 5-minute lock
+      if (currentUser.lockoutStage === 0 && currentUser.failedLoginAttempts >= 3) {
+        currentUser.temporaryLockUntil = new Date(Date.now() + 5 * 60 * 1000);
+        currentUser.lockoutStage = 1;
+        await currentUser.save();
+
+        return res.status(403).json({
+          message: 'Too many failed attempts. Your account is temporarily locked for 5 minutes.',
+          isTemporarilyLocked: true,
+          remainingMinutes: 5,
+          lockUntil: currentUser.temporaryLockUntil,
+        });
+      }
+
+      // Second set of 3 attempts after temp lock -> permanent lock
+      if (currentUser.lockoutStage === 1 && currentUser.failedLoginAttempts >= 3) {
+        currentUser.permanentlyLocked = true;
+        currentUser.lockoutStage = 2;
+        await currentUser.save();
+
+        return res.status(403).json({
+          message: 'Your account is permanently locked due to multiple failed login attempts. Please use "Forgot Password" to reset your password.',
+          isPermanentlyLocked: true,
+        });
+      }
+
+      await currentUser.save();
+
+      const remainingAttempts = 3 - currentUser.failedLoginAttempts;
+      return res.status(400).json({
+        message: 'Invalid email or password.',
+        remainingAttempts: remainingAttempts > 0 ? remainingAttempts : 0,
+      });
     }
 
     if (!currentUser.isVerified) {
       return res.status(403).json({ message: 'Please verify your email before logging in.' });
     }
+
+    // Successful password: reset lockout fields
+    currentUser.failedLoginAttempts = 0;
+    currentUser.temporaryLockUntil = null;
+    currentUser.permanentlyLocked = false;
+    currentUser.lockoutStage = 0;
 
     const now = new Date();
 
@@ -150,6 +217,8 @@ router.post('/login', async (req, res) => {
       { expiresIn: '1h' }
     );
 
+    await currentUser.save({ validateBeforeSave: false });
+
     res.status(200).json({
       message: 'Login successful!',
       token,
@@ -157,7 +226,7 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error',
       error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
