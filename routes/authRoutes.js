@@ -526,7 +526,11 @@ router.post('/reset-password', async (req, res) => {
     console.log('Password reset successful for user:', user.email);
 
     res.json({ 
-      message: 'Password reset successful! Please login with your new password. You will need to verify your identity with MFA.' 
+      message: 'Password reset successful! Please login with your new password. You will need to verify your identity with MFA.',
+      accountUnlocked: true,
+      clearCache: true,
+      attemptCounterReset: true,
+      lockoutCleared: true
     });
   } catch (error) {
     console.error('Reset password error:', error);
