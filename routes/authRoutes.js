@@ -184,6 +184,14 @@ router.post('/login', async (req, res) => {
     currentUser.permanentlyLocked = false;
     currentUser.lockoutStage = 0;
 
+    // Enforce single active session per account
+    if (currentUser.activeSessionToken) {
+      return res.status(403).json({
+        message: 'Account is already logged in on another device or browser. Please logout there first.',
+        isActiveSessionBlocked: true,
+      });
+    }
+
     const now = new Date();
 
     let mfaValidUntil = null;
@@ -212,11 +220,16 @@ router.post('/login', async (req, res) => {
     }
 
     // MFA still valid, skip MFA and generate token
+    // MFA still valid, skip MFA and generate token, also store as active session
     const token = jwt.sign(
       { userId: currentUser._id, role: currentUser.role },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
+
+    currentUser.activeSessionToken = token;
+    currentUser.activeDevice = req.headers['user-agent'] || 'Unknown Device';
+    currentUser.sessionCreatedAt = new Date();
 
     await currentUser.save({ validateBeforeSave: false });
 
@@ -393,6 +406,14 @@ router.post('/verify-mfa', async (req, res) => {
       return res.status(400).json({ message: 'Invalid user.' });
     }
 
+    // Enforce single active session per account
+    if (user.activeSessionToken) {
+      return res.status(403).json({
+        message: 'Account is already logged in on another device or browser. Please logout there first.',
+        isActiveSessionBlocked: true,
+      });
+    }
+
     if (!user.mfaCode || user.mfaCode !== mfaCode) {
       console.log('Invalid MFA code. Expected:', user.mfaCode, 'Received:', mfaCode);
       return res.status(400).json({ message: 'Invalid MFA code.' });
@@ -418,6 +439,11 @@ router.post('/verify-mfa', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
+
+    // Store active session info
+    user.activeSessionToken = token;
+    user.activeDevice = req.headers['user-agent'] || 'Unknown Device';
+    user.sessionCreatedAt = new Date();
 
     console.log('MFA verification successful for user:', userId);
 
