@@ -101,6 +101,22 @@ app.use(cors({
 
 console.log('✅ CORS configured');
 
+// Security headers for clickjacking protection
+app.use((req, res, next) => {
+  // Prevent clickjacking by blocking iframe embedding
+  res.setHeader('X-Frame-Options', 'DENY');
+  
+  // Modern alternative to X-Frame-Options
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+  
+  // Prevent MIME-type sniffing attacks
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  
+  next();
+});
+
+console.log('✅ Clickjacking protection enabled');
+
 // Body parser with size limits
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
