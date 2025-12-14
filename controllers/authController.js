@@ -42,10 +42,11 @@ const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user
+    // Find user (do not reveal whether the email exists)
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'User not found' });
+      // Use generic message to prevent username enumeration
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
 
     // Check if permanently locked
@@ -113,7 +114,7 @@ const loginUser = async (req, res) => {
       
       const remainingAttempts = 3 - user.failedLoginAttempts;
       return res.status(400).json({ 
-        message: 'Invalid password',
+        message: 'Invalid credentials',
         remainingAttempts: remainingAttempts > 0 ? remainingAttempts : 0
       });
     }

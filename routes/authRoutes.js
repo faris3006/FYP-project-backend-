@@ -4,7 +4,10 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/User');
 const { sendVerificationEmail, sendMfaEmail, sendPasswordResetEmail } = require('../utils/emailUtils');
+const LoginAttempt = require('../models/LoginAttempt');
+const BlockedIp = require('../models/BlockedIp');
 const authenticateJWT = require('../middleware/authenticateJWT');
+const checkIpBlock = require('../middleware/checkIpBlock');
 
 const router = express.Router();
 
@@ -61,12 +64,21 @@ router.post('/register', async (req, res) => {
 });
 
 // User Login Route with temporary/permanent lockout enforcement
-router.post('/login', async (req, res) => {
+router.post('/login', checkIpBlock, async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ message: 'Please provide email and password.' });
   }
+
+  // Helper: extract client IP (supports proxies)
+  const getClientIp = (request) => {
+    const xff = (request.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
+    return (xff[0] || request.ip || request.connection?.remoteAddress || '').toString();
+  };
+
+  const userAgent = req.headers['user-agent'] || 'Unknown Device';
+  const clientIp = getClientIp(req);
 
   try {
     const user = await User.findOne({ email });
@@ -105,7 +117,45 @@ router.post('/login', async (req, res) => {
     }
 
     if (!currentUser) {
-      return res.status(400).json({ message: 'Invalid email or password.' });
+      // Log invalid credential attempt (unknown email)
+      try { await LoginAttempt.create({ email, ip: clientIp, userAgent, success: false, reason: 'invalid-credentials' }); } catch (e) { /* no-op */ }
+      
+      // Exponential backoff for unknown email
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      const recentFailures = await LoginAttempt.countDocuments({
+        ip: clientIp,
+        success: false,
+        createdAt: { $gte: tenMinutesAgo }
+      });
+
+      let retryAfter = 0;
+      if (recentFailures >= 5) retryAfter = 30;
+      else if (recentFailures >= 4) retryAfter = 10;
+      else if (recentFailures >= 3) retryAfter = 5;
+      else if (recentFailures >= 2) retryAfter = 3;
+      else if (recentFailures >= 1) retryAfter = 1;
+
+      // Auto-block IP after 10 failures
+      if (recentFailures >= 10) {
+        const blockUntil = new Date(Date.now() + 30 * 60 * 1000);
+        await BlockedIp.findOneAndUpdate(
+          { ip: clientIp },
+          { ip: clientIp, blockedUntil: blockUntil, attemptCount: recentFailures, reason: 'Exceeded maximum failed login attempts' },
+          { upsert: true, new: true }
+        );
+
+        return res.status(429).json({
+          message: 'Too many failed login attempts from your IP address. Blocked for 30 minutes.',
+          isIpBlocked: true,
+          blockedUntil: blockUntil,
+          remainingMinutes: 30
+        });
+      }
+
+      return res.status(400).json({ 
+        message: 'Invalid credentials',
+        retryAfter: retryAfter > 0 ? retryAfter : undefined
+      });
     }
 
     // Permanent lock check
@@ -119,6 +169,8 @@ router.post('/login', async (req, res) => {
     // Temporary lock check
     if (currentUser.temporaryLockUntil && new Date() < currentUser.temporaryLockUntil) {
       const remainingTime = Math.ceil((currentUser.temporaryLockUntil - new Date()) / 1000 / 60);
+      // Log temporary lock block
+      try { await LoginAttempt.create({ email, userId: currentUser._id, ip: clientIp, userAgent, success: false, reason: 'temporary-locked', metadata: { lockUntil: currentUser.temporaryLockUntil } }); } catch (e) { /* no-op */ }
       return res.status(403).json({
         message: 'You cannot enter the password',
         isTemporarilyLocked: true,
@@ -145,6 +197,7 @@ router.post('/login', async (req, res) => {
         currentUser.lockoutStage = 1;
         await currentUser.save();
 
+        try { await LoginAttempt.create({ email, userId: currentUser._id, ip: clientIp, userAgent, success: false, reason: 'temporary-locked' }); } catch (e) { /* no-op */ }
         return res.status(403).json({
           message: 'Too many failed attempts. Your account is temporarily locked for 5 minutes.',
           isTemporarilyLocked: true,
@@ -159,6 +212,7 @@ router.post('/login', async (req, res) => {
         currentUser.lockoutStage = 2;
         await currentUser.save();
 
+        try { await LoginAttempt.create({ email, userId: currentUser._id, ip: clientIp, userAgent, success: false, reason: 'permanent-locked' }); } catch (e) { /* no-op */ }
         return res.status(403).json({
           message: 'Your account is permanently locked due to multiple failed login attempts. Please use "Forgot Password" to reset your password.',
           isPermanentlyLocked: true,
@@ -168,9 +222,50 @@ router.post('/login', async (req, res) => {
       await currentUser.save();
 
       const remainingAttempts = 3 - currentUser.failedLoginAttempts;
+      try { await LoginAttempt.create({ email, userId: currentUser._id, ip: clientIp, userAgent, success: false, reason: 'invalid-credentials', metadata: { remainingAttempts } }); } catch (e) { /* no-op */ }
+      
+      // Exponential backoff: calculate wait time based on recent failures from this IP
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      const recentFailures = await LoginAttempt.countDocuments({
+        ip: clientIp,
+        success: false,
+        createdAt: { $gte: tenMinutesAgo }
+      });
+
+      // Calculate exponential backoff: 1s, 3s, 5s, 10s, 30s
+      let retryAfter = 0;
+      if (recentFailures >= 5) retryAfter = 30;
+      else if (recentFailures >= 4) retryAfter = 10;
+      else if (recentFailures >= 3) retryAfter = 5;
+      else if (recentFailures >= 2) retryAfter = 3;
+      else if (recentFailures >= 1) retryAfter = 1;
+
+      // Auto-block IP after 10 failures in 10 minutes
+      if (recentFailures >= 10) {
+        const blockUntil = new Date(Date.now() + 30 * 60 * 1000); // Block for 30 minutes
+        await BlockedIp.findOneAndUpdate(
+          { ip: clientIp },
+          { 
+            ip: clientIp, 
+            blockedUntil: blockUntil, 
+            attemptCount: recentFailures,
+            reason: 'Exceeded maximum failed login attempts'
+          },
+          { upsert: true, new: true }
+        );
+
+        return res.status(429).json({
+          message: 'Too many failed login attempts from your IP address. Blocked for 30 minutes.',
+          isIpBlocked: true,
+          blockedUntil: blockUntil,
+          remainingMinutes: 30
+        });
+      }
+
       return res.status(400).json({
-        message: 'Invalid email or password.',
+        message: 'Invalid credentials',
         remainingAttempts: remainingAttempts > 0 ? remainingAttempts : 0,
+        retryAfter: retryAfter > 0 ? retryAfter : undefined
       });
     }
 
@@ -212,6 +307,9 @@ router.post('/login', async (req, res) => {
 
       await sendMfaEmail(currentUser.email, mfaCode);
 
+      // Log password accepted but MFA required
+      try { await LoginAttempt.create({ email, userId: currentUser._id, ip: clientIp, userAgent, success: true, reason: 'mfa-required' }); } catch (e) { /* no-op */ }
+
       return res.status(200).json({
         message: 'Login successful! Please verify your MFA code.',
         mfaRequired: true,
@@ -232,6 +330,9 @@ router.post('/login', async (req, res) => {
     currentUser.sessionCreatedAt = new Date();
 
     await currentUser.save({ validateBeforeSave: false });
+
+    // Log successful login where MFA is still valid
+    try { await LoginAttempt.create({ email, userId: currentUser._id, ip: clientIp, userAgent, success: true, reason: 'password-accepted' }); } catch (e) { /* no-op */ }
 
     res.status(200).json({
       message: 'Login successful!',
