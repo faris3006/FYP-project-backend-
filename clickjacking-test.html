@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clickjacking Protection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .test-info {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border: 2px solid #333;
+        }
+        h1 {
+            color: #d32f2f;
+        }
+        .expected {
+            background-color: #e8f5e9;
+            padding: 10px;
+            border-left: 4px solid #4caf50;
+            margin: 10px 0;
+        }
+        iframe {
+            border: 3px solid red;
+            background-color: #ffebee;
+        }
+        .warning {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-info">
+        <h1>🔒 Clickjacking Protection Test</h1>
+        <p><strong>Testing:</strong> Attempting to embed your frontend in an iframe</p>
+        <p><strong>Target:</strong> https://fyp-project-nine-gray.vercel.app</p>
+        
+        <div class="expected">
+            <h3>✅ Expected Result (Protection Working):</h3>
+            <ul>
+                <li>Iframe below should be <strong>EMPTY</strong> or show an error</li>
+                <li>Browser console shows: "Refused to display in a frame because it set 'X-Frame-Options' to 'deny'"</li>
+                <li>This means clickjacking protection is <strong>WORKING</strong></li>
+            </ul>
+        </div>
+        
+        <div style="background-color: #ffebee; padding: 10px; border-left: 4px solid #d32f2f; margin: 10px 0;">
+            <h3>❌ Bad Result (No Protection):</h3>
+            <ul>
+                <li>If you see your booking site loaded in the iframe below</li>
+                <li>This means protection is <strong>NOT working</strong></li>
+            </ul>
+        </div>
+        
+        <p class="warning">⚠️ Open your browser's Developer Console (F12) to see the security message!</p>
+    </div>
+
+    <h2>Iframe Test Area:</h2>
+    <iframe 
+        src="https://fyp-project-nine-gray.vercel.app" 
+        width="1705" 
+        height="1500"
+        title="Clickjacking Test">
+    </iframe>
+
+    <script>
+        // Check if iframe loaded
+        window.addEventListener('load', () => {
+            console.log('🔍 Clickjacking test page loaded');
+            console.log('📋 Check if the iframe above is blocked');
+            console.log('✅ If you see "Refused to display" error, protection is working!');
+        });
+    </script>
+</body>
+</html>
