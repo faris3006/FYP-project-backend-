@@ -1,4 +1,5 @@
-const fetch = require('node-fetch');
+const https = require('https');
+const querystring = require('querystring');
 
 /**
  * Verify Google reCAPTCHA v3 token
@@ -19,19 +20,39 @@ async function verifyRecaptcha(token, remoteIp = null) {
   }
 
   try {
-    const params = new URLSearchParams({
+    const postData = querystring.stringify({
       secret: secretKey,
       response: token,
       ...(remoteIp && { remoteip: remoteIp })
     });
 
-    const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString()
-    });
+    const data = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'www.google.com',
+        path: '/recaptcha/api/siteverify',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      };
 
-    const data = await response.json();
+      const req = https.request(options, (res) => {
+        let body = '';
+        res.on('data', (chunk) => body += chunk);
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch (e) {
+            reject(new Error('Failed to parse reCAPTCHA response'));
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.write(postData);
+      req.end();
+    });
 
     if (!data.success) {
       console.log('reCAPTCHA verification failed:', data['error-codes']);
