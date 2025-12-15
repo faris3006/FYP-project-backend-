@@ -8,6 +8,7 @@ const LoginAttempt = require('../models/LoginAttempt');
 const BlockedIp = require('../models/BlockedIp');
 const authenticateJWT = require('../middleware/authenticateJWT');
 const checkIpBlock = require('../middleware/checkIpBlock');
+const { verifyRecaptcha } = require('../utils/recaptchaUtils');
 
 const router = express.Router();
 
@@ -81,6 +82,18 @@ router.post('/login', checkIpBlock, async (req, res) => {
   const clientIp = getClientIp(req);
 
   try {
+    // Verify reCAPTCHA token first
+    const { captchaToken } = req.body;
+    const captchaResult = await verifyRecaptcha(captchaToken, clientIp);
+    
+    if (!captchaResult.success) {
+      console.log('Captcha verification failed for IP:', clientIp);
+      return res.status(400).json({ 
+        message: 'Captcha verification failed. Please try again.',
+        captchaError: true
+      });
+    }
+
     const user = await User.findOne({ email });
     let currentUser = user;
 
@@ -120,7 +133,7 @@ router.post('/login', checkIpBlock, async (req, res) => {
       // Log invalid credential attempt (unknown email)
       try { await LoginAttempt.create({ email, ip: clientIp, userAgent, success: false, reason: 'invalid-credentials' }); } catch (e) { /* no-op */ }
       
-      // Exponential backoff for unknown email
+      // Check if IP should be blocked (10 failures in 10 minutes)
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
       const recentFailures = await LoginAttempt.countDocuments({
         ip: clientIp,
@@ -128,16 +141,9 @@ router.post('/login', checkIpBlock, async (req, res) => {
         createdAt: { $gte: tenMinutesAgo }
       });
 
-      let retryAfter = 0;
-      if (recentFailures >= 5) retryAfter = 30;
-      else if (recentFailures >= 4) retryAfter = 10;
-      else if (recentFailures >= 3) retryAfter = 5;
-      else if (recentFailures >= 2) retryAfter = 3;
-      else if (recentFailures >= 1) retryAfter = 1;
-
       // Auto-block IP after 10 failures
       if (recentFailures >= 10) {
-        const blockUntil = new Date(Date.now() + 30 * 60 * 1000);
+        const blockUntil = new Date(Date.now() + 10 * 60 * 1000); // Block for 10 minutes
         await BlockedIp.findOneAndUpdate(
           { ip: clientIp },
           { ip: clientIp, blockedUntil: blockUntil, attemptCount: recentFailures, reason: 'Exceeded maximum failed login attempts' },
@@ -145,16 +151,15 @@ router.post('/login', checkIpBlock, async (req, res) => {
         );
 
         return res.status(429).json({
-          message: 'Too many failed login attempts from your IP address. Blocked for 30 minutes.',
+          message: 'Too many failed login attempts from your IP address. Blocked for 10 minutes.',
           isIpBlocked: true,
           blockedUntil: blockUntil,
-          remainingMinutes: 30
+          remainingMinutes: 10
         });
       }
 
       return res.status(400).json({ 
-        message: 'Invalid credentials',
-        retryAfter: retryAfter > 0 ? retryAfter : undefined
+        message: 'Invalid credentials'
       });
     }
 
@@ -224,7 +229,7 @@ router.post('/login', checkIpBlock, async (req, res) => {
       const remainingAttempts = 3 - currentUser.failedLoginAttempts;
       try { await LoginAttempt.create({ email, userId: currentUser._id, ip: clientIp, userAgent, success: false, reason: 'invalid-credentials', metadata: { remainingAttempts } }); } catch (e) { /* no-op */ }
       
-      // Exponential backoff: calculate wait time based on recent failures from this IP
+      // Check if IP should be blocked (10 failures in 10 minutes)
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
       const recentFailures = await LoginAttempt.countDocuments({
         ip: clientIp,
@@ -232,17 +237,9 @@ router.post('/login', checkIpBlock, async (req, res) => {
         createdAt: { $gte: tenMinutesAgo }
       });
 
-      // Calculate exponential backoff: 1s, 3s, 5s, 10s, 30s
-      let retryAfter = 0;
-      if (recentFailures >= 5) retryAfter = 30;
-      else if (recentFailures >= 4) retryAfter = 10;
-      else if (recentFailures >= 3) retryAfter = 5;
-      else if (recentFailures >= 2) retryAfter = 3;
-      else if (recentFailures >= 1) retryAfter = 1;
-
       // Auto-block IP after 10 failures in 10 minutes
       if (recentFailures >= 10) {
-        const blockUntil = new Date(Date.now() + 30 * 60 * 1000); // Block for 30 minutes
+        const blockUntil = new Date(Date.now() + 10 * 60 * 1000); // Block for 10 minutes
         await BlockedIp.findOneAndUpdate(
           { ip: clientIp },
           { 
@@ -255,17 +252,16 @@ router.post('/login', checkIpBlock, async (req, res) => {
         );
 
         return res.status(429).json({
-          message: 'Too many failed login attempts from your IP address. Blocked for 30 minutes.',
+          message: 'Too many failed login attempts from your IP address. Blocked for 10 minutes.',
           isIpBlocked: true,
           blockedUntil: blockUntil,
-          remainingMinutes: 30
+          remainingMinutes: 10
         });
       }
 
       return res.status(400).json({
         message: 'Invalid credentials',
-        remainingAttempts: remainingAttempts > 0 ? remainingAttempts : 0,
-        retryAfter: retryAfter > 0 ? retryAfter : undefined
+        remainingAttempts: remainingAttempts > 0 ? remainingAttempts : 0
       });
     }
 
