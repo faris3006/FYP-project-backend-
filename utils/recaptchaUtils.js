@@ -8,6 +8,12 @@ const querystring = require('querystring');
  * @returns {Promise<{success: boolean, score: number, action: string, message?: string}>}
  */
 async function verifyRecaptcha(token, remoteIp = null) {
+  // Check if captcha is disabled for testing
+  if (process.env.RECAPTCHA_DISABLED === 'true') {
+    console.warn('⚠️  RECAPTCHA_DISABLED - captcha verification skipped for testing');
+    return { success: true, score: 1.0, action: 'login', message: 'Captcha disabled for testing' };
+  }
+
   const secretKey = process.env.RECAPTCHA_SECRET_KEY;
 
   if (!secretKey) {
