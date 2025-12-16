@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 const { generateBookingQRCode } = require('../utils/qrCodeUtils');
+const { sanitizeText, sanitizeJsonString } = require('../utils/sanitize');
 
 // Helper to parse optional dates safely
 function parseDate(value) {
@@ -67,7 +68,6 @@ function normalizeBookingForResponse(booking) {
 
 exports.createBooking = async (req, res) => {
   const { serviceName, serviceDetails, scheduledDate, totalAmount, notes } = req.body;
-  const { sanitizeText, sanitizeJsonString } = require('../utils/sanitize');
   const amount = Number(totalAmount);
 
   // Log incoming request
@@ -119,6 +119,17 @@ exports.createBooking = async (req, res) => {
     const cleanServiceName = sanitizeText(serviceName);
     const cleanNotes = notes ? sanitizeText(notes) : undefined;
     const cleanServiceDetails = serviceDetails ? sanitizeJsonString(serviceDetails) : undefined;
+
+    // Ensure sanitized serviceName remains valid after stripping scripts/tags
+    if (!cleanServiceName || !cleanServiceName.trim()) {
+      console.warn('[createBooking] Validation failed after sanitization: serviceName empty');
+      return res.status(400).json({
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        message: 'Service name is required and must contain valid text.',
+        field: 'serviceName'
+      });
+    }
     console.log('[createBooking] Validation passed, attempting MongoDB create', {
       userId: userId.toString(),
       serviceName: serviceName.trim(),
