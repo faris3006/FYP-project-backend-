@@ -67,6 +67,7 @@ function normalizeBookingForResponse(booking) {
 
 exports.createBooking = async (req, res) => {
   const { serviceName, serviceDetails, scheduledDate, totalAmount, notes } = req.body;
+  const { sanitizeText, sanitizeJsonString } = require('../utils/sanitize');
   const amount = Number(totalAmount);
 
   // Log incoming request
@@ -113,6 +114,11 @@ exports.createBooking = async (req, res) => {
   try {
     // Convert userId string to MongoDB ObjectId for proper comparison
     const userId = new mongoose.Types.ObjectId(req.user.userId);
+
+    // Sanitize user-supplied text fields to prevent stored XSS
+    const cleanServiceName = sanitizeText(serviceName);
+    const cleanNotes = notes ? sanitizeText(notes) : undefined;
+    const cleanServiceDetails = serviceDetails ? sanitizeJsonString(serviceDetails) : undefined;
     console.log('[createBooking] Validation passed, attempting MongoDB create', {
       userId: userId.toString(),
       serviceName: serviceName.trim(),
@@ -124,7 +130,7 @@ exports.createBooking = async (req, res) => {
     try {
       qrCode = await generateBookingQRCode({
         userId,
-        serviceName: serviceName.trim(),
+        serviceName: cleanServiceName,
         totalAmount: amount
       });
     } catch (qrError) {
@@ -150,11 +156,11 @@ exports.createBooking = async (req, res) => {
     // Create booking with validation
     const booking = await Booking.create({
       userId: userId,
-      serviceName: serviceName.trim(),
-      serviceDetails: serviceDetails ? serviceDetails.trim() : undefined,
+      serviceName: cleanServiceName,
+      serviceDetails: cleanServiceDetails,
       scheduledDate: parseDate(scheduledDate),
       totalAmount: amount,
-      notes: notes ? notes.trim() : undefined,
+      notes: cleanNotes,
       paymentStatus: 'pending',
       qrCode: qrCode,
     });
