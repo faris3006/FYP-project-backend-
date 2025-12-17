@@ -31,6 +31,37 @@ const { initializeSendGrid } = require('./config/emailConfig');
 
 const app = express();
 
+// ===== CORS SETTINGS =====
+const PRIMARY_ORIGIN = 'https://fyp-project-nine-gray.vercel.app';
+const DEV_ORIGINS = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001'
+];
+
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [PRIMARY_ORIGIN]
+  : [PRIMARY_ORIGIN, ...DEV_ORIGINS];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser requests (no Origin header) and default to primary origin
+    if (!origin) return callback(null, PRIMARY_ORIGIN);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, origin);
+    }
+
+    console.log('⚠️  CORS blocked origin:', origin);
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  optionsSuccessStatus: 204
+};
+
 // ===== INITIALIZE SENDGRID (NON-BLOCKING) =====
 // Run SendGrid initialization in background to not block server startup
 setImmediate(() => {
@@ -63,41 +94,27 @@ try {
   console.warn('⚠️  Compression middleware not available, continuing without it');
 }
 
-// CORS configuration - Allow all origins in production, restrict in development
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+// CORS configuration - lock production to primary origin, allow localhost in dev
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
-    // In production, allow all origins for easier mobile/desktop access
-    if (process.env.NODE_ENV === 'production') {
-      return callback(null, true);
-    }
+// Ensure CORS headers are present on all responses (including errors)
+app.use((req, res, next) => {
+  const requestOrigin = req.headers.origin;
+  const allowOrigin = allowedOrigins.includes(requestOrigin) ? requestOrigin : PRIMARY_ORIGIN;
 
-    // In development, restrict to specific origins
-    const allowedOrigins = [
-      'https://fyp-project-nine-gray.vercel.app',
-      'https://fyp-project-git-main-faris-projects-56742192.vercel.app',
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:3001'
-    ];
+  res.setHeader('Access-Control-Allow-Origin', allowOrigin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+  res.setHeader('Vary', 'Origin');
 
-    // Allow all Vercel preview URLs (pattern: *.vercel.app)
-    const isVercelPreview = origin && origin.includes('.vercel.app');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
 
-    if (allowedOrigins.includes(origin) || isVercelPreview) {
-      callback(null, true);
-    } else {
-      console.log('⚠️  CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
-}));
+  next();
+});
 
 console.log('✅ CORS configured');
 
