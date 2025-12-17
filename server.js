@@ -3,6 +3,11 @@ dotenv.config(); // Load environment variables FIRST
 
 // ===== VALIDATE ENVIRONMENT VARIABLES =====
 const requiredEnvVars = ['JWT_SECRET', 'DB_URI'];
+
+// Require reCAPTCHA secret unless explicitly disabled for testing
+if (String(process.env.RECAPTCHA_DISABLED).toLowerCase() !== 'true') {
+  requiredEnvVars.push('RECAPTCHA_SECRET_KEY');
+}
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 
 if (missingVars.length > 0) {
@@ -96,7 +101,6 @@ try {
 
 // CORS configuration - lock production to primary origin, allow localhost in dev
 app.use(cors(corsOptions));
-app.options('/(.*)', cors(corsOptions));
 
 // Ensure CORS headers are present on all responses (including errors)
 app.use((req, res, next) => {
