@@ -96,7 +96,7 @@ try {
 
 // CORS configuration - lock production to primary origin, allow localhost in dev
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options('/(.*)', cors(corsOptions));
 
 // Ensure CORS headers are present on all responses (including errors)
 app.use((req, res, next) => {
