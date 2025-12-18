@@ -1,21 +1,18 @@
+// Load environment variables FIRST
 const dotenv = require('dotenv');
-dotenv.config(); // Load environment variables FIRST
+dotenv.config();
 
 // ===== VALIDATE ENVIRONMENT VARIABLES =====
 const requiredEnvVars = ['JWT_SECRET', 'DB_URI'];
-
 if (String(process.env.RECAPTCHA_DISABLED).toLowerCase() !== 'true') {
   requiredEnvVars.push('RECAPTCHA_SECRET_KEY');
 }
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
-
 if (missingVars.length > 0) {
   console.error('⚠️  FATAL: Missing required environment variables:');
   missingVars.forEach(v => console.error(`   - ${v}`));
-  console.error('Please ensure these are set in your Render environment variables.');
   process.exit(1);
 }
-
 console.log('✅ Environment variables validated');
 
 // ===== LOAD DEPENDENCIES =====
@@ -25,7 +22,7 @@ const cors = require('cors');
 const path = require('path');
 const compression = require('compression');
 
-// ===== LOAD ROUTES & MIDDLEWARE =====
+// ===== ROUTES & MIDDLEWARE =====
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
@@ -43,7 +40,6 @@ const DEV_ORIGINS = [
   'http://localhost:3001',
   'http://127.0.0.1:3001'
 ];
-
 const allowedOrigins = process.env.NODE_ENV === 'production'
   ? [PRIMARY_ORIGIN]
   : [PRIMARY_ORIGIN, ...DEV_ORIGINS];
@@ -51,11 +47,7 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, PRIMARY_ORIGIN);
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, origin);
-    }
-
+    if (allowedOrigins.includes(origin)) return callback(null, origin);
     console.log('⚠️  CORS blocked origin:', origin);
     return callback(null, false);
   },
@@ -65,21 +57,18 @@ const corsOptions = {
   optionsSuccessStatus: 204
 };
 
-// ===== INITIALIZE SENDGRID (NON-BLOCKING) =====
+// ===== INITIALIZE SENDGRID =====
 setImmediate(() => {
   try {
     const initialized = initializeSendGrid();
-    if (initialized) {
-      console.log('✅ SendGrid initialized successfully');
-    } else {
-      console.warn('⚠️  SendGrid not available - email features will be disabled until configured');
-    }
+    if (initialized) console.log('✅ SendGrid initialized successfully');
+    else console.warn('⚠️  SendGrid not available, email features disabled');
   } catch (err) {
-    console.warn('⚠️  SendGrid initialization error (continuing without email):', err.message);
+    console.warn('⚠️  SendGrid initialization error:', err.message);
   }
 });
 
-// ===== MIDDLEWARE CONFIGURATION =====
+// ===== MIDDLEWARE =====
 app.use((req, res, next) => {
   req.setTimeout(60000);
   res.setTimeout(60000);
@@ -98,17 +87,12 @@ app.use(cors(corsOptions));
 app.use((req, res, next) => {
   const requestOrigin = req.headers.origin;
   const allowOrigin = allowedOrigins.includes(requestOrigin) ? requestOrigin : PRIMARY_ORIGIN;
-
   res.setHeader('Access-Control-Allow-Origin', allowOrigin);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
   res.setHeader('Vary', 'Origin');
-
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
-  }
-
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 
@@ -134,9 +118,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 console.log('✅ Static file serving configured');
 
 // ===== ROUTES =====
-app.get('/', (req, res) => {
-  res.json({ message: 'Backend API is running', status: 'OK' });
-});
+app.get('/', (req, res) => res.json({ message: 'Backend API is running', status: 'OK' }));
 
 app.get('/health', (req, res) => {
   res.json({
@@ -150,7 +132,6 @@ app.get('/health', (req, res) => {
 app.post('/api/test-email', (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
-
   sendVerificationEmail(email, 'test-user-id');
   res.json({ success: true, message: 'Test email sent successfully' });
 });
@@ -159,13 +140,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/bookings', authenticateJWT, bookingRoutes);
 app.use('/api/admin', authenticateJWT, adminRoutes);
 
-// ===== DATABASE CONNECTION =====
+// ===== DATABASE =====
 console.log('Connecting to database...');
-mongoose.connect(process.env.DB_URI).then(() => {
-  console.log('✅ Database connected successfully');
-}).catch(err => {
-  console.error('❌ Database connection failed:', err.message);
-});
+mongoose.connect(process.env.DB_URI)
+  .then(() => console.log('✅ Database connected successfully'))
+  .catch(err => console.error('❌ Database connection failed:', err.message));
 
 // ===== START SERVER =====
 const port = process.env.PORT || 5000;
@@ -173,7 +152,7 @@ const server = app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${port}`);
 });
 
-// ===== GRACEFUL SHUTDOWN (FIXED) =====
+// ===== GRACEFUL SHUTDOWN =====
 const shutdown = async (signal) => {
   console.log(`\n🛑 ${signal} received: shutting down gracefully`);
   server.close(async () => {
@@ -189,11 +168,9 @@ const shutdown = async (signal) => {
   });
 };
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
-process.on('unhandledRejection', (reason) => {
-  console.error('❌ Unhandled Rejection:', reason);
-});
+process.on('unhandledRejection', reason => console.error('❌ Unhandled Rejection:', reason));
 
 module.exports = server;
